@@ -221,8 +221,23 @@ function local_sentaldocupload_get_course_validity_days(int $courseid): int {
     global $DB;
 
     $shortname = get_config('local_sentaldocupload', 'validityfieldshortname') ?: 'validity_period';
+    $columns = $DB->get_columns('customfield_data');
+    $valuefields = array_values(array_filter(
+        ['intvalue', 'decvalue', 'shortcharvalue', 'charvalue', 'value'],
+        static function($field) use ($columns) {
+            return isset($columns[$field]);
+        }
+    ));
 
-    $sql = "SELECT d.id, d.value, d.intvalue, d.decvalue, d.shortcharvalue, d.charvalue
+    if (!$valuefields) {
+        return 0;
+    }
+
+    $selectfields = implode(', ', array_map(static function($field) {
+        return 'd.' . $field;
+    }, $valuefields));
+
+    $sql = "SELECT d.id, $selectfields
               FROM {customfield_data} d
               JOIN {customfield_field} f ON f.id = d.fieldid
              WHERE f.shortname = :shortname
@@ -233,7 +248,7 @@ function local_sentaldocupload_get_course_validity_days(int $courseid): int {
         return 0;
     }
 
-    foreach (['intvalue', 'decvalue', 'shortcharvalue', 'charvalue', 'value'] as $field) {
+    foreach ($valuefields as $field) {
         if (isset($record->$field) && $record->$field !== '' && $record->$field !== null) {
             return max(0, (int)$record->$field);
         }

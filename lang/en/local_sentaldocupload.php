@@ -22,6 +22,7 @@ $string['selectcourse'] = 'Select course';
 $string['selectcourseafteruser'] = 'Select user first';
 $string['allcourseshelp'] = 'All courses for the selected learner are shown. Courses are not filtered by EDS/manual mode.';
 $string['nocourses'] = 'This user has no courses.';
+$string['course_load_error'] = 'Could not load courses. Check the Moodle developer debug log for details.';
 $string['course'] = 'Course';
 $string['loadcourses'] = 'Load courses';
 $string['validitydays'] = 'Validity days';
