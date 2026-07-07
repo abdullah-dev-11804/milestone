@@ -348,7 +348,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $linkeduserid = (int)$linkeduserid;
                 $autocompletedbyuserid[$linkeduserid] = 0;
                 $completiontimebyuserid[$linkeduserid] = 0;
-                if (local_sentaldocupload_mark_course_completed($courseid, $linkeduserid, $now)) {
+                if (local_sentaldocupload_mark_course_completed($courseid, $linkeduserid, $now, $versionid)) {
                     $autocompletedcount++;
                     $autocompletedbyuserid[$linkeduserid] = 1;
                     $completiontimebyuserid[$linkeduserid] = $now;

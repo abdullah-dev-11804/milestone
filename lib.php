@@ -652,14 +652,62 @@ function local_sentaldocupload_is_course_completed(int $courseid, int $userid): 
 }
 
 /**
+ * Ask NCASign to ignore the course_completed event caused by this manual upload.
+ *
+ * @param int $courseid
+ * @param int $userid
+ * @param int $sourceid uploaded document version id
+ * @param int $timecreated
+ * @return void
+ */
+function local_sentaldocupload_create_ncasign_completion_suppression(
+    int $courseid,
+    int $userid,
+    int $sourceid = 0,
+    int $timecreated = 0
+): void {
+    global $DB;
+
+    $table = 'local_ncasign_completion_suppress';
+    if (!$DB->get_manager()->table_exists($table)) {
+        return;
+    }
+
+    $timecreated = $timecreated ?: time();
+    $record = (object)[
+        'userid' => $userid,
+        'courseid' => $courseid,
+        'sourcecomponent' => 'local_sentaldocupload',
+        'sourceid' => $sourceid,
+        'reason' => 'manual_course_completion_upload',
+        'consumed' => 0,
+        'timecreated' => $timecreated,
+        'expiresat' => $timecreated + 600,
+        'timeconsumed' => 0,
+    ];
+
+    try {
+        $DB->insert_record($table, $record);
+    } catch (Throwable $e) {
+        debugging('Unable to create NCASign completion suppression: ' . $e->getMessage(), DEBUG_DEVELOPER);
+    }
+}
+
+/**
  * Mark course complete for a learner when a Type 1 course completion document is uploaded.
  *
  * @param int $courseid
  * @param int $userid
  * @param int|null $timecompleted
+ * @param int $sourceid uploaded document version id
  * @return bool true when this call completed the course, false when already completed
  */
-function local_sentaldocupload_mark_course_completed(int $courseid, int $userid, ?int $timecompleted = null): bool {
+function local_sentaldocupload_mark_course_completed(
+    int $courseid,
+    int $userid,
+    ?int $timecompleted = null,
+    int $sourceid = 0
+): bool {
     global $DB, $CFG;
     require_once($CFG->libdir . '/completionlib.php');
     require_once($CFG->dirroot . '/completion/completion_completion.php');
@@ -681,6 +729,8 @@ function local_sentaldocupload_mark_course_completed(int $courseid, int $userid,
     $alreadycompleted = ($existing && !empty($existing->timecompleted));
 
     if (!$alreadycompleted) {
+        local_sentaldocupload_create_ncasign_completion_suppression($courseid, $userid, $sourceid, $timecompleted);
+
         try {
             $ccompletion = new completion_completion(['userid' => $userid, 'course' => $courseid]);
             $ccompletion->mark_complete($timecompleted);
