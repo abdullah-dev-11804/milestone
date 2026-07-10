@@ -38,8 +38,8 @@ $PAGE->set_heading(get_string('versionhistory', 'local_sentaldocupload'));
 $PAGE->requires->css(new moodle_url('/local/sentaldocupload/styles.css'));
 
 $documenttypes = [
-    'type1' => get_string('coursecompletiondocument', 'local_sentaldocupload'),
-    'type2' => 'Supplementary document',
+    'type1' => get_string('doctype_type1_short', 'local_sentaldocupload'),
+    'type2' => get_string('doctype_type2_short', 'local_sentaldocupload'),
     'protocol' => get_string('protocol', 'local_sentaldocupload'),
     'certificate' => get_string('certificate', 'local_sentaldocupload'),
     'completionbook' => get_string('completionbook', 'local_sentaldocupload'),
@@ -47,12 +47,13 @@ $documenttypes = [
 
 function local_sentaldocupload_history_document_type_label(string $type, ?string $customlabel = null, array $documenttypes = []): string {
     if ($type === 'type1') {
-        return 'Course completion';
+        return get_string('doctype_type1_short', 'local_sentaldocupload');
     }
     if ($type === 'type2') {
-        $label = 'Supplementary document';
+        $label = get_string('doctype_type2_short', 'local_sentaldocupload');
         if (!empty($customlabel)) {
-            $label .= ' - ' . $customlabel;
+            // Custom labels are user-entered content. They are displayed as entered.
+            $label .= ' - ' . format_string($customlabel);
         }
         return $label;
     }
@@ -386,7 +387,7 @@ function local_sentaldocupload_history_render_results(int $page, int $perpage, m
         $versionselect .= html_writer::end_tag('select');
 
         $courseurl = new moodle_url('/course/view.php', ['id' => (int)$row->courseid]);
-        $coursecell = html_writer::link($courseurl, s($row->coursename), ['class' => 'sental-table-mainlink']);
+        $coursecell = html_writer::link($courseurl, format_string($row->coursename), ['class' => 'sental-table-mainlink']);
 
         $learnername = fullname((object)[
             'firstname' => $row->learnerfirstname ?? '',
@@ -452,7 +453,7 @@ if (!$filterdocumenttypes) {
 
 $courseoptions = [];
 foreach ($courses as $id => $name) {
-    $courseoptions[(string)$id] = $name;
+    $courseoptions[(string)$id] = format_string($name);
 }
 
 $studentoptionshtml = '';
@@ -529,6 +530,10 @@ if ($ajax) {
     die();
 }
 
+$nostudentsfoundjs = json_encode(get_string('nostudentsfound', 'local_sentaldocupload'));
+$filterfailedjs = json_encode(get_string('filter_request_failed', 'local_sentaldocupload'));
+$nodocumentjs = json_encode(get_string('statusnodocument', 'local_sentaldocupload'));
+
 $filterjs = <<<HTML
 <script>
 (function() {
@@ -549,7 +554,7 @@ $filterjs = <<<HTML
             if (!dropdown.querySelector('.sental-user-no-results')) {
                 var empty = document.createElement('div');
                 empty.className = 'sental-user-no-results';
-                empty.textContent = 'No students found';
+                empty.textContent = {$nostudentsfoundjs};
                 empty.hidden = true;
                 dropdown.appendChild(empty);
             }
@@ -608,7 +613,7 @@ $filterjs = <<<HTML
             opt.dataset.issuedate = payload.issuedate || '-';
             opt.dataset.expirydate = payload.expirydate || '-';
             opt.dataset.status = payload.status || 'nodocument';
-            opt.dataset.statustext = payload.statustext || 'No document';
+            opt.dataset.statustext = payload.statustext || {$nodocumentjs};
             opt.dataset.statusclass = payload.statusclass || 'secondary';
             opt.dataset.uploadedby = payload.uploadedby || '-';
             opt.dataset.uploadedat = payload.uploadedat || '-';
@@ -730,7 +735,7 @@ $filterjs = <<<HTML
                     })
                     .catch(function() {
                         container.classList.remove('sental-loading');
-                        container.insertAdjacentHTML('afterbegin', '<div class="alert alert-danger">Filter request failed. Please refresh and try again.</div>');
+                        container.insertAdjacentHTML('afterbegin', '<div class="alert alert-danger">' + {$filterfailedjs} + '</div>');
                     });
             }
             function applyFilters(e) {

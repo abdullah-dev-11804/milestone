@@ -33,8 +33,8 @@ $PAGE->set_heading(get_string('audittrail', 'local_sentaldocupload'));
 $PAGE->requires->css(new moodle_url('/local/sentaldocupload/styles.css'));
 
 $documenttypes = [
-    'type1' => 'Course completion',
-    'type2' => 'Supplementary document',
+    'type1' => get_string('doctype_type1_short', 'local_sentaldocupload'),
+    'type2' => get_string('doctype_type2_short', 'local_sentaldocupload'),
 ];
 
 $actions = [
@@ -189,7 +189,7 @@ function local_sentaldocupload_audit_render_results(int $page, int $perpage, moo
         }
 
         $doctype = $documenttypes[$log->documenttype] ?? s($log->documenttype);
-        $courselabel = s($log->coursename ?: '-');
+        $courselabel = !empty($log->coursename) ? format_string($log->coursename) : '-';
         if (!empty($log->courseid)) {
             $courseurl = new moodle_url('/course/view.php', ['id' => (int)$log->courseid]);
             $courselabel = html_writer::link($courseurl, $courselabel, ['class' => 'sental-table-mainlink']);
@@ -198,8 +198,11 @@ function local_sentaldocupload_audit_render_results(int $page, int $perpage, moo
             $courselabel,
             $doctype,
         ];
-        if (!empty($log->documentlabel)) {
-            $docparts[] = s($log->documentlabel);
+        // Custom labels are user-entered data. Show them only for Type 2 supplementary
+        // documents. Type 1 labels from older uploads may contain stored English text
+        // such as "Course completion document", so we do not show that stored label here.
+        if ($log->documenttype === 'type2' && !empty($log->documentlabel)) {
+            $docparts[] = format_string($log->documentlabel);
         }
         $document = implode(html_writer::empty_tag('br'), $docparts);
 
@@ -239,7 +242,7 @@ $courses = $DB->get_records_sql_menu("SELECT DISTINCT c.id, c.fullname
                                     ORDER BY c.fullname ASC");
 $courseoptions = [];
 foreach ($courses as $id => $name) {
-    $courseoptions[(string)$id] = $name;
+    $courseoptions[(string)$id] = format_string($name);
 }
 
 $learners = $DB->get_records_sql("SELECT DISTINCT u.id, u.firstname, u.lastname, u.email
@@ -313,7 +316,7 @@ $filterhtml .= html_writer::div(
 );
 $filterhtml .= html_writer::div(
     html_writer::label(get_string('audit_actor', 'local_sentaldocupload'), 'id_actorid') .
-    local_sentaldocupload_audit_filter_select('actorid', $actoroptions, $actorid, 'All actors'),
+    local_sentaldocupload_audit_filter_select('actorid', $actoroptions, $actorid, get_string('filter_all_actors', 'local_sentaldocupload')),
     'col-md-3 mb-2'
 );
 $filterhtml .= html_writer::end_div();
@@ -335,6 +338,9 @@ if ($ajax) {
     die();
 }
 
+$nostudentsfoundjs = json_encode(get_string('nostudentsfound', 'local_sentaldocupload'));
+$filterfailedjs = json_encode(get_string('filter_request_failed', 'local_sentaldocupload'));
+
 $filterjs = <<<HTML
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -346,7 +352,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!dropdown.querySelector('.sental-user-no-results')) {
             var empty = document.createElement('div');
             empty.className = 'sental-user-no-results';
-            empty.textContent = 'No students found';
+            empty.textContent = {$nostudentsfoundjs};
             empty.hidden = true;
             dropdown.appendChild(empty);
         }
@@ -400,7 +406,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     clean.searchParams.delete('ajax');
                     if (push) { window.history.pushState({}, '', clean.toString()); }
                 })
-                .catch(function() { container.classList.remove('sental-loading'); container.insertAdjacentHTML('afterbegin', '<div class="alert alert-danger">Filter request failed. Please refresh and try again.</div>'); });
+                .catch(function() { container.classList.remove('sental-loading'); container.insertAdjacentHTML('afterbegin', '<div class="alert alert-danger">' + {$filterfailedjs} + '</div>'); });
         }
         function applyAuditFilters(e) {
             if (e) { e.preventDefault(); e.stopPropagation(); }

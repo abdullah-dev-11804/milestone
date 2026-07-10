@@ -13,17 +13,16 @@ if (!has_capability('local/sentaldocupload:manage', $context)) {
 
 $versionid = required_param('versionid', PARAM_INT);
 
-$sql = "SELECT v.*, d.courseid, d.documenttype, d.issuedate, d.expirydate, du.userid
+$sql = "SELECT v.*, v.id AS versionid,
+               d.courseid,
+               d.documenttype,
+               d.issuedate AS docissuedate,
+               d.expirydate AS docexpirydate
           FROM {sental_modeb_doc_version} v
           JOIN {sental_modeb_doc} d ON d.id = v.documentid
-          JOIN {sental_modeb_doc_user} du ON du.documentid = d.id
          WHERE v.id = :versionid";
-$records = $DB->get_records_sql($sql, ['versionid' => $versionid]);
-if (!$records) {
-    throw new moodle_exception('filenotfound');
-}
-
-$first = reset($records);
+$first = $DB->get_record_sql($sql, ['versionid' => $versionid], MUST_EXIST);
+$audituserid = (int)$DB->get_field('sental_modeb_doc_user', 'userid', ['documentid' => (int)$first->documentid], IGNORE_MULTIPLE);
 
 $fs = get_file_storage();
 $files = $fs->get_area_files($context->id, 'local_sentaldocupload', 'document', $versionid, 'filename', false);
@@ -32,5 +31,5 @@ if (!$file) {
     throw new moodle_exception('filenotfound');
 }
 
-local_sentaldocupload_audit((int)$first->documentid, $versionid, (int)$first->userid, 'view');
+local_sentaldocupload_audit((int)$first->documentid, $versionid, $audituserid, 'view');
 local_sentaldocupload_send_file($file, false);

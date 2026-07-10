@@ -10,6 +10,8 @@ require_once(__DIR__ . '/lib.php');
 $versionid = required_param('versionid', PARAM_INT);
 $userid = required_param('userid', PARAM_INT);
 $courseid = required_param('courseid', PARAM_INT);
+$preview = optional_param('preview', 0, PARAM_BOOL);
+$inline = optional_param('inline', 0, PARAM_BOOL);
 
 $ducolumns = $DB->get_columns('sental_modeb_doc_user');
 $versioncolumns = $DB->get_columns('sental_modeb_doc_version');
@@ -71,4 +73,4 @@ if (!$file) {
     throw new moodle_exception('filenotfound');
 }
 
-local_sentaldocupload_send_file($file);
+local_sentaldocupload_send_file($file, !($preview || $inline));

@@ -33,7 +33,8 @@ define([], function() {
     }
 
     return {
-        init: function(coursesUrl, expiryUrl, sesskey, preferredCourseId) {
+        init: function(coursesUrl, expiryUrl, sesskey, preferredCourseId, labels) {
+            labels = labels || {};
             var company = document.getElementById('id_companyid');
             var userInput = document.getElementById('id_usercombo');
             var userDropdown = document.getElementById('id_user_dropdown');
@@ -90,7 +91,7 @@ define([], function() {
                     return;
                 }
                 course.innerHTML = '';
-                course.appendChild(option('', label || 'Select user first'));
+                course.appendChild(option('', label || labels.selectcourseafteruser || 'Select user first'));
                 course.disabled = true;
                 selectedCourseHasEds = false;
                 courseParticipants = {};
@@ -123,7 +124,7 @@ define([], function() {
                 if (!noResultsNode) {
                     noResultsNode = document.createElement('div');
                     noResultsNode.className = 'sental-user-no-results';
-                    noResultsNode.textContent = 'No users found';
+                    noResultsNode.textContent = labels.nousersfound || 'No users found';
                     userDropdown.appendChild(noResultsNode);
                 }
                 return noResultsNode;
@@ -158,8 +159,8 @@ define([], function() {
                 if (user) {
                     user.value = '';
                 }
-                resetCourses('Select user first');
-                setPreview('Select course and issue date to calculate expiry date.', 'info');
+                resetCourses(labels.selectcourseafteruser || 'Select user first');
+                setPreview(labels.expirypreviewpending || 'Select course and issue date to calculate expiry date.', 'info');
                 updateAvailability();
             }
 
@@ -255,14 +256,14 @@ define([], function() {
                 if (!course || !course.value) {
                     var selectFirst = document.createElement('div');
                     selectFirst.className = 'sental-participant-empty';
-                    selectFirst.textContent = 'Select course first.';
+                    selectFirst.textContent = labels.selectcoursefirstparticipants || 'Select course first.';
                     els.dropdown.appendChild(selectFirst);
                     return;
                 }
                 if (!participants.length) {
                     var empty = document.createElement('div');
                     empty.className = 'sental-participant-empty';
-                    empty.textContent = 'No additional enrolled users found for this course.';
+                    empty.textContent = labels.noadditionalusers || 'No additional enrolled users found for this course.';
                     els.dropdown.appendChild(empty);
                     return;
                 }
@@ -281,7 +282,7 @@ define([], function() {
 
                 var noResults = document.createElement('div');
                 noResults.className = 'sental-participant-empty sental-participant-no-results';
-                noResults.textContent = 'No matching users found';
+                noResults.textContent = labels.nomatchingusers || 'No matching users found';
                 noResults.hidden = true;
                 els.dropdown.appendChild(noResults);
 
@@ -312,7 +313,7 @@ define([], function() {
                 var remove = document.createElement('button');
                 remove.type = 'button';
                 remove.className = 'sental-participant-chip-remove';
-                remove.setAttribute('aria-label', 'Remove ' + label);
+                remove.setAttribute('aria-label', (labels.removeparticipant || 'Remove') + ' ' + label);
                 remove.setAttribute('data-row', rownum);
                 remove.setAttribute('data-userid', participantId);
                 remove.textContent = '×';
@@ -388,6 +389,16 @@ define([], function() {
 
             function updateDocumentTypeUI() {
                 updateSelectedCourseEdsFlag();
+                var firstVisibleType1Row = null;
+
+                visibleRows().forEach(function(row) {
+                    var rownum = row.getAttribute('data-row');
+                    var documentType = document.getElementById('id_documenttype' + rownum);
+                    if (documentType && documentType.value === 'type1' && firstVisibleType1Row === null) {
+                        firstVisibleType1Row = rownum;
+                    }
+                });
+
                 Array.prototype.slice.call(document.querySelectorAll('.sental-document-row')).forEach(function(row) {
                     var rownum = row.getAttribute('data-row');
                     var documentType = document.getElementById('id_documenttype' + rownum);
@@ -408,9 +419,10 @@ define([], function() {
                     }
 
                     hide(customWrap);
-                    if (hasValue(user) && hasValue(course) && !selectedCourseHasEds) {
+                    if (hasValue(user) && hasValue(course) && !selectedCourseHasEds && rownum === firstVisibleType1Row) {
                         show(publicWrap);
-                        // Do not auto-check this. Admin must explicitly tick it to show the document to the student/public profile.
+                        // Only the first visible Type 1 course-completion row can be marked public.
+                        // Other Type 1 rows are stored privately and their checkbox is hidden.
                     } else {
                         hide(publicWrap);
                         if (publicCheckbox) {
@@ -424,12 +436,12 @@ define([], function() {
                 if (!user || !course) {
                     return;
                 }
-                resetCourses('Loading courses...');
-                setPreview('Select course and issue date to calculate expiry date.', 'info');
+                resetCourses(labels.loadingcourses || 'Loading courses...');
+                setPreview(labels.expirypreviewpending || 'Select course and issue date to calculate expiry date.', 'info');
                 updateAvailability();
 
                 if (!hasValue(user)) {
-                    resetCourses('Select user first');
+                    resetCourses(labels.selectcourseafteruser || 'Select user first');
                     updateAvailability();
                     return;
                 }
@@ -447,7 +459,7 @@ define([], function() {
                     }
                     course.innerHTML = '';
                     if (xhr.status !== 200) {
-                        course.appendChild(option('', 'Could not load courses'));
+                        course.appendChild(option('', labels.couldnotloadcourses || 'Could not load courses'));
                         course.disabled = true;
                         updateAvailability();
                         return;
@@ -457,23 +469,23 @@ define([], function() {
                     try {
                         data = JSON.parse(xhr.responseText);
                     } catch (e) {
-                        course.appendChild(option('', 'Could not load courses'));
+                        course.appendChild(option('', labels.couldnotloadcourses || 'Could not load courses'));
                         course.disabled = true;
                         updateAvailability();
                         return;
                     }
 
                     if (!data.courses || !data.courses.length) {
-                        course.appendChild(option('', data.message || 'This user has no courses'));
+                        course.appendChild(option('', data.message || labels.userhasnocourses || 'This user has no courses'));
                         course.disabled = true;
                         updateAvailability();
                         return;
                     }
 
                     courseParticipants = {};
-                    course.appendChild(option('', 'Select course'));
+                    course.appendChild(option('', labels.selectcourse || 'Select course'));
                     data.courses.forEach(function(item) {
-                        var label = item.fullname + ' - ' + item.uploadpath + ' (Validity days: ' + item.validitydays + ')';
+                        var label = item.fullname + ' - ' + item.uploadpath + ' (' + (labels.validitydays || 'Validity days') + ': ' + item.validitydays + ')';
                         courseParticipants[item.id] = item.participants || [];
                         var courseOption = option(item.id, label);
                         courseOption.setAttribute('data-haseds', item.haseds ? '1' : '0');
@@ -501,13 +513,13 @@ define([], function() {
             function calculateExpiry() {
                 updateAvailability();
                 if (!hasValue(course) || !hasValue(issueDate)) {
-                    setPreview('Select course and issue date to calculate expiry date.', 'info');
+                    setPreview(labels.expirypreviewpending || 'Select course and issue date to calculate expiry date.', 'info');
                     return;
                 }
 
                 updateSelectedCourseEdsFlag();
                 updateDocumentTypeUI();
-                setPreview('Calculating expiry date...', 'info');
+                setPreview(labels.calculatingexpiry || 'Calculating expiry date...', 'info');
                 var xhr = new XMLHttpRequest();
                 xhr.open('GET', expiryUrl + '?sesskey=' + encodeURIComponent(sesskey) + '&courseid=' + encodeURIComponent(course.value) + '&issuedate=' + encodeURIComponent(issueDate.value));
                 xhr.onreadystatechange = function() {
@@ -515,14 +527,14 @@ define([], function() {
                         return;
                     }
                     if (xhr.status !== 200) {
-                        setPreview('Could not calculate expiry date.', 'danger');
+                        setPreview(labels.couldnotcalculateexpiry || 'Could not calculate expiry date.', 'danger');
                         return;
                     }
                     try {
                         var data = JSON.parse(xhr.responseText);
-                        setPreview(data.message || 'Expiry date calculated.', data.success ? 'success' : 'warning');
+                        setPreview(data.message || labels.expirycalculated || 'Expiry date calculated.', data.success ? 'success' : 'warning');
                     } catch (e) {
-                        setPreview('Could not calculate expiry date.', 'danger');
+                        setPreview(labels.couldnotcalculateexpiry || 'Could not calculate expiry date.', 'danger');
                     }
                     updateAvailability();
                 };
@@ -683,7 +695,7 @@ define([], function() {
                 }
             });
 
-            resetCourses('Select user first');
+            resetCourses(labels.selectcourseafteruser || 'Select user first');
             filterUsers(false);
             updateDocumentTypeUI();
             updateAvailability();

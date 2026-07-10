@@ -54,7 +54,7 @@ $string['customlabelhelp'] = 'Required for Type 2 supplementary documents. This 
 $string['missingcustomlabel'] = 'Please enter a custom document name/label for Type 2 supplementary document.';
 
 $string['showinpublicprofile'] = 'Show in Public Profile';
-$string['showinpublicprofilehelp'] = 'Tick this only when the Type 1 course completion document should be visible to the student/public profile. If an EDS course-completion document exists, the checkbox is hidden and the scan remains private. Type 2 is never public.';
+$string['showinpublicprofilehelp'] = 'Tick this only for the first Type 1 course completion document in the upload. If another Type 1 row is added, its Public Profile checkbox is hidden and that file is stored privately. If an EDS course-completion document exists, the checkbox is hidden and the scan remains private. Type 2 is never public.';
 $string['uploadpaths_manual'] = 'Upload paths: Manual scan upload';
 $string['uploadpaths_eds_manual'] = 'Upload paths: EDS + Manual scan upload';
 
@@ -165,3 +165,31 @@ $string['action'] = 'Action';
 
 $string['sentaldocupload:manage'] = 'Manage SENTAL document uploads';
 $string['sentaldocupload:viewdocuments'] = 'View SENTAL documents';
+$string['all_documents'] = 'All documents';
+$string['documentviewer'] = 'Document viewer';
+$string['viewdocument'] = 'View Document';
+$string['copysharelink'] = 'Copy share link';
+$string['copied'] = 'Copied';
+$string['openinnewtab'] = 'Open in new tab';
+$string['validationdate'] = 'Validation date';
+
+$string['viewinbrowser'] = 'View in browser';
+$string['browserviewfallback'] = 'If the document does not preview here, open it in your browser.';
+
+$string['pdfbutton'] = 'PDF';
+$string['pageindicator'] = 'Page {$a->page} / {$a->total}';
+$string['multilingualauditnote'] = 'Student-facing strings are loaded from the selected Moodle language pack.';
+$string['filter_all_actors'] = 'All actors';
+$string['nostudentsfound'] = 'No students found';
+$string['couldnotloadcourses'] = 'Could not load courses';
+$string['userhasnocourses'] = 'This user has no courses';
+$string['multilingualdatawarning'] = 'Names, emails, uploaded filenames, and custom labels are user-entered data and are shown as entered. Course names are translated only when Moodle multilingual course names are configured.';
+$string['nousersfound'] = 'No users found';
+$string['noadditionalusers'] = 'No additional enrolled users found for this course.';
+$string['nomatchingusers'] = 'No matching users found';
+$string['loadingcourses'] = 'Loading courses...';
+$string['calculatingexpiry'] = 'Calculating expiry date...';
+$string['couldnotcalculateexpiry'] = 'Could not calculate expiry date.';
+$string['expirycalculated'] = 'Expiry date calculated.';
+$string['removeparticipant'] = 'Remove';
+$string['filter_request_failed'] = 'Filter request failed. Please refresh and try again.';

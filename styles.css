@@ -1847,3 +1847,338 @@ a.sental-file-link i {
 .sental-public-profile-cert-card {
     background: #fff !important;
 }
+
+/* v0.8.4 Unified document viewer and My Certifications View action. */
+.sental-student-versions-table {
+    min-width: 940px !important;
+    table-layout: fixed !important;
+}
+.sental-student-versions-table th:nth-child(1),
+.sental-student-versions-table td:nth-child(1) { width: 27% !important; }
+.sental-student-versions-table th:nth-child(2),
+.sental-student-versions-table td:nth-child(2) { width: 16% !important; }
+.sental-student-versions-table th:nth-child(3),
+.sental-student-versions-table td:nth-child(3) { width: 10% !important; }
+.sental-student-versions-table th:nth-child(4),
+.sental-student-versions-table td:nth-child(4) { width: 13% !important; }
+.sental-student-versions-table th:nth-child(5),
+.sental-student-versions-table td:nth-child(5) { width: 13% !important; }
+.sental-student-versions-table th:nth-child(6),
+.sental-student-versions-table td:nth-child(6) { width: 11% !important; }
+.sental-student-versions-table th:nth-child(7),
+.sental-student-versions-table td:nth-child(7) { width: 10% !important; }
+.sental-student-view-link,
+.sental-public-profile-cert-download,
+.sental-viewer-download {
+    border-radius: 999px !important;
+}
+
+.sental-viewer-page {
+    max-width: 1180px;
+    margin: 0 auto;
+}
+.sental-viewer-header-card,
+.sental-viewer-frame-card {
+    border: 1px solid #dfe9e4;
+    background: #fff;
+    border-radius: 18px;
+    padding: 1rem;
+    box-shadow: 0 8px 24px rgba(15, 56, 42, .05);
+    margin-bottom: 1rem;
+}
+.sental-viewer-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: .35rem;
+}
+.sental-viewer-title {
+    margin: 0;
+    font-size: 1.45rem;
+    color: #15875a;
+    overflow-wrap: anywhere;
+}
+.sental-viewer-course {
+    color: #52616d;
+    font-weight: 700;
+    margin-bottom: .75rem;
+}
+.sental-viewer-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: .5rem .85rem;
+    margin-bottom: .85rem;
+}
+.sental-viewer-meta {
+    color: #243241;
+    background: #f3f8f6;
+    border: 1px solid #e0ebe6;
+    border-radius: 12px;
+    padding: .45rem .65rem;
+}
+.sental-viewer-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .55rem;
+    margin-bottom: .75rem;
+}
+.sental-viewer-share-url {
+    max-width: 100%;
+    border-radius: 12px;
+}
+.sental-viewer-frame-card {
+    padding: .75rem;
+}
+.sental-viewer-frame {
+    display: block;
+    width: 100%;
+    min-height: 760px;
+    border: 0;
+    border-radius: 14px;
+    background: #f4f7f6;
+}
+@media (max-width: 767px) {
+    .sental-viewer-frame {
+        min-height: 560px;
+    }
+    .sental-viewer-title-row {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}
+
+
+/* v0.8.5 Browser inline document viewer */
+.sental-viewer-frame-card {
+    min-height: 76vh;
+}
+.sental-viewer-frame {
+    width: 100% !important;
+    min-height: 76vh !important;
+    border: 0 !important;
+    background: #f8fbfa !important;
+    display: block !important;
+}
+.sental-viewer-fallback {
+    padding: 2rem;
+    text-align: center;
+}
+.sental-viewer-browser-link {
+    white-space: nowrap;
+}
+
+
+/* v0.8.6 Mobile-style in-browser document viewer */
+.sental-browser-viewer-page {
+    margin: -1rem -1rem 0;
+    background: #2f4154;
+    min-height: calc(100vh - 90px);
+}
+.sental-browser-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .75rem 1rem;
+    background: #fff;
+    border-bottom: 1px solid #d9e2ea;
+    box-shadow: 0 1px 8px rgba(0,0,0,.08);
+}
+.sental-browser-toolbar-title {
+    min-width: 0;
+    flex: 1 1 auto;
+    font-size: 1.05rem;
+    line-height: 1.2;
+    font-weight: 800;
+    color: #233142;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.sental-browser-toolbar-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    flex: 0 0 auto;
+}
+.sental-browser-btn {
+    min-height: 40px;
+    border-radius: 10px !important;
+    font-weight: 800 !important;
+    padding: .45rem .75rem !important;
+    white-space: nowrap;
+}
+.sental-browser-download {
+    background: #172335 !important;
+    border-color: #172335 !important;
+    color: #fff !important;
+}
+.sental-browser-share-url {
+    position: fixed !important;
+    width: 1px !important;
+    height: 1px !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+.sental-browser-canvas {
+    background: #2f4154;
+    min-height: calc(100vh - 160px);
+    padding: 1.6rem 1.25rem 2.5rem;
+}
+.sental-browser-page-pill {
+    display: table;
+    margin: 0 auto 1rem;
+    padding: .42rem 1.05rem;
+    border-radius: 999px;
+    background: rgba(255,255,255,.18);
+    color: #fff;
+    font-weight: 850;
+    font-size: 1rem;
+}
+.sental-browser-document-wrap {
+    width: min(980px, 100%);
+    min-height: 70vh;
+    margin: 0 auto;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+}
+.sental-browser-frame {
+    display: block;
+    width: 100%;
+    min-height: 78vh;
+    background: #fff;
+    border: 0;
+    border-radius: 8px;
+    box-shadow: 0 14px 34px rgba(0,0,0,.26);
+}
+.sental-browser-image-preview {
+    max-width: 100%;
+    height: auto;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 14px 34px rgba(0,0,0,.26);
+}
+.sental-browser-info-panel {
+    width: min(980px, 100%);
+    margin: 1rem auto 0;
+    padding: .85rem 1rem;
+    background: rgba(255,255,255,.92);
+    border-radius: 12px;
+    color: #172335;
+    box-shadow: 0 8px 24px rgba(0,0,0,.14);
+}
+.sental-browser-info-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    margin-bottom: .5rem;
+}
+.sental-browser-file-title {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.sental-browser-version {
+    flex: 0 0 auto;
+    padding: .2rem .55rem;
+    border-radius: 999px;
+    background: #e9f3ee;
+    font-weight: 800;
+}
+.sental-browser-info-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .55rem 1rem;
+    font-size: .9rem;
+}
+.sental-browser-info-meta .badge {
+    min-width: 78px;
+}
+@media (max-width: 768px) {
+    .sental-browser-viewer-page {
+        margin-left: -15px;
+        margin-right: -15px;
+        min-height: calc(100vh - 60px);
+    }
+    .sental-browser-toolbar {
+        padding: .55rem .6rem;
+        gap: .4rem;
+    }
+    .sental-browser-toolbar-title {
+        font-size: .98rem;
+        max-width: 34vw;
+    }
+    .sental-browser-toolbar-actions {
+        gap: .32rem;
+    }
+    .sental-browser-btn {
+        min-height: 38px;
+        padding: .38rem .56rem !important;
+        font-size: .86rem !important;
+    }
+    .sental-browser-copy {
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .sental-browser-canvas {
+        padding: 1.1rem .65rem 2rem;
+        min-height: calc(100vh - 110px);
+    }
+    .sental-browser-page-pill {
+        font-size: .92rem;
+        margin-bottom: .8rem;
+    }
+    .sental-browser-document-wrap {
+        min-height: 70vh;
+    }
+    .sental-browser-frame {
+        min-height: 72vh;
+        border-radius: 4px;
+    }
+    .sental-browser-info-panel {
+        display: none;
+    }
+}
+@media (max-width: 430px) {
+    .sental-browser-toolbar-title {
+        max-width: 28vw;
+        font-size: .9rem;
+    }
+    .sental-browser-btn {
+        padding: .34rem .46rem !important;
+        font-size: .8rem !important;
+    }
+    .sental-browser-back {
+        display: none !important;
+    }
+}
+
+
+/* v0.9.4 Course card generated image fallback.
+   Moodle auto-generated course card pictures are not stored as normal course files.
+   When no overview image URL exists, show a generated pattern instead of a blank block. */
+.sental-student-card-image {
+    background-color: hsl(var(--sental-course-hue, 42), 76%, 76%) !important;
+    background-image:
+        var(--sental-course-image, none),
+        radial-gradient(circle at 16% 28%, hsla(var(--sental-course-hue, 42), 55%, 48%, .28) 0 14px, transparent 15px),
+        radial-gradient(circle at 40% 16%, hsla(var(--sental-course-hue, 42), 55%, 48%, .22) 0 18px, transparent 19px),
+        radial-gradient(circle at 70% 36%, hsla(var(--sental-course-hue, 42), 55%, 48%, .24) 0 16px, transparent 17px),
+        radial-gradient(circle at 84% 72%, hsla(var(--sental-course-hue, 42), 55%, 48%, .22) 0 20px, transparent 21px),
+        linear-gradient(135deg,
+            hsl(var(--sental-course-hue, 42), 78%, 82%) 0%,
+            hsl(var(--sental-course-hue, 42), 70%, 72%) 52%,
+            hsl(var(--sental-course-hue, 42), 82%, 88%) 100%) !important;
+    background-size: cover, 76px 76px, 92px 92px, 86px 86px, 100px 100px, cover !important;
+    background-position: center, 0 0, 36px 10px, 8px 42px, 55px 24px, center !important;
+}

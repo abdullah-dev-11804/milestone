@@ -17,8 +17,9 @@ $PAGE->set_heading(get_string('certifications', 'local_sentaldocupload'));
 $PAGE->requires->css(new moodle_url('/local/sentaldocupload/styles.css'));
 
 $courseimageurl = static function(int $courseid) use ($PAGE) : string {
-    // First use Moodle's own course image resolver. This normally matches the
-    // image shown on /my/courses.php.
+    global $OUTPUT;
+
+    // 1) Moodle course overview image / Moodle course-card image.
     try {
         if (class_exists('\\core_course\\external\\course_summary_exporter')) {
             $course = get_course($courseid);
@@ -28,10 +29,10 @@ $courseimageurl = static function(int $courseid) use ($PAGE) : string {
             }
         }
     } catch (Throwable $e) {
-        // Fall back to direct overviewfiles lookup below.
+        // Continue to the next fallback.
     }
 
-    // Fallback: read the course overview image directly from Moodle files.
+    // 2) Direct overviewfiles fallback.
     $context = context_course::instance($courseid, IGNORE_MISSING);
     if ($context) {
         $fs = get_file_storage();
@@ -56,7 +57,23 @@ $courseimageurl = static function(int $courseid) use ($PAGE) : string {
         }
     }
 
-    // Final fallback: empty string lets CSS show the default blurred placeholder.
+    // 3) Moodle default generated course picture.
+    // This is what Moodle uses when a course has no uploaded overview image.
+    try {
+        if (!empty($OUTPUT) && method_exists($OUTPUT, 'get_generated_image_for_id')) {
+            $generated = $OUTPUT->get_generated_image_for_id($courseid);
+            if ($generated instanceof moodle_url) {
+                return $generated->out(false);
+            }
+            if (is_string($generated) && $generated !== '') {
+                return $generated;
+            }
+        }
+    } catch (Throwable $e) {
+        // Continue to CSS fallback.
+    }
+
+    // 4) Last fallback: CSS generated placeholder.
     return '';
 };
 
@@ -102,6 +119,7 @@ $documentsbycourse = [];
 $doccountbycourse = [];
 $statussourcebycourse = [];
 $latestexpirybycourse = [];
+$primaryversionbycourse = [];
 
 foreach ($versions as $row) {
     $courseid = (int)$row->courseid;
@@ -162,6 +180,7 @@ foreach ($documentsbycourse as $courseid => $types) {
 
     if ($best) {
         $latestexpirybycourse[$courseid] = empty($best->expirydate) ? null : (int)$best->expirydate;
+        $primaryversionbycourse[$courseid] = (int)$best->versionid;
         $statussourcebycourse[$courseid] = local_sentaldocupload_get_status($latestexpirybycourse[$courseid], true);
     } else {
         $latestexpirybycourse[$courseid] = null;
@@ -196,6 +215,7 @@ foreach ($courses as $course) {
                     'uploadedat' => empty($row->timecreated) ? '-' : userdate((int)$row->timecreated, get_string('strftimedatetimeshort', 'langconfig')),
                     'uploadedby' => trim((string)$row->uploaderfirstname . ' ' . (string)$row->uploaderlastname),
                     'downloadurl' => (new moodle_url('/local/sentaldocupload/download.php', ['versionid' => (int)$row->versionid]))->out(false),
+                    'viewurl' => (new moodle_url('/local/sentaldocupload/viewer.php', ['versionid' => (int)$row->versionid]))->out(false),
                 ];
             }
             if (!empty($versionspayload)) {
@@ -225,19 +245,29 @@ foreach ($courses as $course) {
 
 $selectedcourseid = ($requestedcourseid > 0 && isset($coursepayload[$requestedcourseid])) ? $requestedcourseid : 0;
 $payloadjson = json_encode($coursepayload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+$langjson = json_encode([
+    'all' => get_string('all_documents', 'local_sentaldocupload'),
+    'type1' => get_string('doctype_type1_short', 'local_sentaldocupload'),
+    'type2' => get_string('doctype_type2_short', 'local_sentaldocupload'),
+    'nodocs' => get_string('nodocumentsfortype', 'local_sentaldocupload'),
+    'view' => get_string('viewfile', 'local_sentaldocupload'),
+    'version' => get_string('versionno', 'local_sentaldocupload'),
+], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
 $PAGE->requires->js_init_code(<<<JS
 (function() {
     var courses = {$payloadjson};
     var preferredCourseId = {$selectedcourseid};
+    var lang = {$langjson};
     var selectedCourseId = null;
 
     function qs(selector) { return document.querySelector(selector); }
     function qsa(selector) { return Array.prototype.slice.call(document.querySelectorAll(selector)); }
 
     function typeLabel(type) {
-        if (type === 'type1') { return 'Course completion'; }
-        if (type === 'type2') { return 'Supplementary document'; }
+        if (type === 'type1') { return lang.type1 || type; }
+        if (type === 'type2') { return lang.type2 || type; }
+        if (type === 'all') { return lang.all || type; }
         return type;
     }
 
@@ -260,10 +290,10 @@ $PAGE->requires->js_init_code(<<<JS
         var issuetd = tr.querySelector('[data-field="issue"]');
         var expirytd = tr.querySelector('[data-field="expiry"]');
         var statustd = tr.querySelector('[data-field="status"]');
-        var download = tr.querySelector('.sental-student-download-link');
+        var view = tr.querySelector('.sental-student-view-link');
 
         if (filelink) {
-            filelink.href = selected.downloadurl;
+            filelink.href = selected.viewurl;
             filelink.textContent = selected.filename;
             filelink.title = selected.filename;
         }
@@ -273,7 +303,7 @@ $PAGE->requires->js_init_code(<<<JS
         if (issuetd) { issuetd.textContent = selected.issuedate; }
         if (expirytd) { expirytd.textContent = selected.expirydate; }
         if (statustd) { statustd.innerHTML = selected.statushtml; }
-        if (download) { download.href = selected.downloadurl; }
+        if (view) { view.href = selected.viewurl; }
     }
 
     function renderRows(courseid, type) {
@@ -282,7 +312,18 @@ $PAGE->requires->js_init_code(<<<JS
         var table = qs('#sental-student-versions');
         if (!tbody || !table || !empty) { return; }
         tbody.innerHTML = '';
-        var rows = (((courses[courseid] || {}).types || {})[type] || []);
+        var rows = [];
+        var alltypes = ((courses[courseid] || {}).types || {});
+        if (type === 'all') {
+            ['type1', 'type2'].forEach(function(t) {
+                (alltypes[t] || []).forEach(function(row) {
+                    row.__doctype = t;
+                    rows.push(row);
+                });
+            });
+        } else {
+            rows = (alltypes[type] || []).map(function(row) { row.__doctype = type; return row; });
+        }
         if (!rows.length) {
             empty.style.display = 'block';
             table.style.display = 'none';
@@ -300,12 +341,12 @@ $PAGE->requires->js_init_code(<<<JS
 
             var filetd = document.createElement('td');
             var link = document.createElement('a');
-            link.href = selected.downloadurl;
+            link.href = selected.viewurl;
             link.className = 'sental-student-file-link';
             link.textContent = selected.filename;
             link.title = selected.filename;
             filetd.appendChild(link);
-            if (documentRow.label && type === 'type2') {
+            if (documentRow.label && (documentRow.__doctype || type) === 'type2') {
                 var label = document.createElement('div');
                 label.className = 'sental-student-file-label';
                 label.textContent = documentRow.label;
@@ -313,10 +354,14 @@ $PAGE->requires->js_init_code(<<<JS
             }
             tr.appendChild(filetd);
 
+            var typetd = document.createElement('td');
+            typetd.textContent = typeLabel(documentRow.__doctype || type);
+            tr.appendChild(typetd);
+
             var versiontd = document.createElement('td');
             var versionselect = document.createElement('select');
             versionselect.className = 'custom-select custom-select-sm sental-student-version-select';
-            versionselect.setAttribute('aria-label', 'Version');
+            versionselect.setAttribute('aria-label', lang.version || '');
             (documentRow.versions || []).forEach(function(version) {
                 var opt = document.createElement('option');
                 opt.value = String(version.versionid);
@@ -343,9 +388,9 @@ $PAGE->requires->js_init_code(<<<JS
 
             var actiontd = document.createElement('td');
             var dl = document.createElement('a');
-            dl.href = selected.downloadurl;
-            dl.className = 'btn btn-sm btn-outline-success sental-student-download-link';
-            dl.textContent = 'Download';
+            dl.href = selected.viewurl;
+            dl.className = 'btn btn-sm btn-outline-success sental-student-view-link';
+            dl.textContent = lang.view || '';
             actiontd.appendChild(dl);
             tr.appendChild(actiontd);
 
@@ -374,18 +419,23 @@ $PAGE->requires->js_init_code(<<<JS
         if (!types.length) {
             var opt = document.createElement('option');
             opt.value = '';
-            opt.textContent = 'No documents uploaded';
+            opt.textContent = lang.nodocs || '';
             select.appendChild(opt);
             select.disabled = true;
             renderRows(courseid, '');
         } else {
             select.disabled = false;
+            var allopt = document.createElement('option');
+            allopt.value = 'all';
+            allopt.textContent = typeLabel('all');
+            select.appendChild(allopt);
             types.forEach(function(type) {
                 var opt = document.createElement('option');
                 opt.value = type;
                 opt.textContent = typeLabel(type);
                 select.appendChild(opt);
             });
+            select.value = 'all';
             renderRows(courseid, select.value);
         }
         section.style.display = 'block';
@@ -395,7 +445,15 @@ $PAGE->requires->js_init_code(<<<JS
         var card = e.target.closest('.sental-student-course-card');
         if (card) {
             e.preventDefault();
-            renderTypes(card.getAttribute('data-courseid'));
+            var courseid = card.getAttribute('data-courseid');
+            renderTypes(courseid);
+
+            // Course card must not open the document viewer directly.
+            // It should open/select this course's certificate/document section on the same page.
+            var detail = qs('#sental-student-detail');
+            if (detail && detail.scrollIntoView) {
+                detail.scrollIntoView({behavior: 'smooth', block: 'start'});
+            }
         }
     });
     document.addEventListener('change', function(e) {
@@ -438,7 +496,10 @@ foreach ($courses as $course) {
         'data-courseid' => $courseid,
     ]);
     $imageurl = (string)($coursepayload[$courseid]['courseimage'] ?? '');
-    $imagestyle = $imageurl !== '' ? '--sental-course-image:url(' . s($imageurl) . ');' : '';
+    $hue = (($courseid * 47) % 360);
+    $imagestyle = $imageurl !== ''
+        ? '--sental-course-image:url(' . s($imageurl) . ');'
+        : '--sental-course-image:none;--sental-course-hue:' . $hue . ';';
     echo html_writer::div('', 'sental-student-card-image', [
         'style' => $imagestyle
     ]);
@@ -461,7 +522,7 @@ echo html_writer::start_div('sental-student-table-wrap');
 echo html_writer::start_tag('table', ['class' => 'generaltable sental-student-versions-table', 'id' => 'sental-student-versions']);
 echo html_writer::start_tag('thead');
 echo html_writer::start_tag('tr');
-$headers = [get_string('file', 'local_sentaldocupload'), get_string('versionno', 'local_sentaldocupload'), get_string('issuedate', 'local_sentaldocupload'), get_string('expirydate', 'local_sentaldocupload'), get_string('certificationstatus', 'local_sentaldocupload'), get_string('action', 'local_sentaldocupload')];
+$headers = [get_string('file', 'local_sentaldocupload'), get_string('documenttype', 'local_sentaldocupload'), get_string('versionno', 'local_sentaldocupload'), get_string('issuedate', 'local_sentaldocupload'), get_string('expirydate', 'local_sentaldocupload'), get_string('certificationstatus', 'local_sentaldocupload'), get_string('action', 'local_sentaldocupload')];
 foreach ($headers as $header) {
     echo html_writer::tag('th', $header);
 }

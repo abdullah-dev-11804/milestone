@@ -934,6 +934,12 @@ function local_sentaldocupload_get_public_profile_scans(int $userid, ?int $cours
             'userid' => $userid,
             'courseid' => (int)$record->courseid,
         ]))->out(false);
+        $record->viewerurl = (new moodle_url('/local/sentaldocupload/viewer.php', [
+            'versionid' => (int)$record->versionid,
+            'userid' => $userid,
+            'courseid' => (int)$record->courseid,
+            'public' => 1,
+        ]))->out(false);
         $visible[(int)$record->versionid] = $record;
     }
 
@@ -967,9 +973,9 @@ function local_sentaldocupload_render_public_profile_certifications(int $userid)
         $out .= html_writer::tag('strong', format_string($scan->coursefullname), ['class' => 'sental-public-profile-cert-course']);
         $out .= html_writer::div(s($scan->filename), 'sental-public-profile-cert-file');
         $out .= html_writer::div(get_string('versionno', 'local_sentaldocupload') . ': v' . (int)$scan->versionno, 'sental-public-profile-cert-meta');
-        $out .= html_writer::div(get_string('issuedate', 'local_sentaldocupload') . ': ' . s($formatdate($scan->issuedate)), 'sental-public-profile-cert-meta');
+        $out .= html_writer::div(get_string('validationdate', 'local_sentaldocupload') . ': ' . s($formatdate($scan->issuedate)), 'sental-public-profile-cert-meta');
         $out .= html_writer::div(get_string('expirydate', 'local_sentaldocupload') . ': ' . s($formatdate($scan->expirydate)), 'sental-public-profile-cert-meta');
-        $out .= html_writer::link($scan->publicurl, get_string('downloadfile', 'local_sentaldocupload'), ['class' => 'btn btn-sm btn-outline-success sental-public-profile-cert-download']);
+        $out .= html_writer::link($scan->viewerurl, get_string('viewdocument', 'local_sentaldocupload'), ['class' => 'btn btn-sm btn-outline-success sental-public-profile-cert-download']);
         $out .= html_writer::end_div();
     }
     $out .= html_writer::end_div();
@@ -985,30 +991,10 @@ function local_sentaldocupload_render_public_profile_certifications(int $userid)
  * @param stdClass|null $course
  */
 function local_sentaldocupload_myprofile_navigation(core_user\output\myprofile\tree $tree, $user, $iscurrentuser, $course): void {
-    if (empty($user->id) || isguestuser($user)) {
-        return;
-    }
-
-    $content = local_sentaldocupload_render_public_profile_certifications((int)$user->id);
-    if (trim($content) === '') {
-        return;
-    }
-
-    $category = new core_user\output\myprofile\category(
-        'sentaldocuploadcertifications',
-        get_string('certifications', 'local_sentaldocupload'),
-        null
-    );
-    $tree->add_category($category);
-
-    $node = new core_user\output\myprofile\node(
-        'sentaldocuploadcertifications',
-        'sentaldocuploadpubliccertifications',
-        get_string('certifications', 'local_sentaldocupload'),
-        null,
-        $content
-    );
-    $tree->add_node($node);
+    // Disabled by requirement: do not show SENTAL certifications on Moodle public profile.
+    // Course completion Type 1 documents are still stored in the plugin tables and Moodle File API.
+    // Their display location will be handled separately later.
+    return;
 }
 
 /**
