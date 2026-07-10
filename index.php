@@ -18,7 +18,7 @@ $canmanageglobal = has_capability('local/sentaldocupload:manage', $context);
 // My Certifications page instead of showing local/sentaldocupload:manage.
 if (!$canmanageglobal && !local_sentaldocupload_can_upload_for_course($requestedcourseid)) {
     $params = [];
-    if ($requestedcourseid > 0) {
+   if ($requestedcourseid > 0) {
         $params['courseid'] = $requestedcourseid;
     }
     redirect(new moodle_url('/local/sentaldocupload/mydocuments.php', $params));
@@ -36,23 +36,6 @@ $PAGE->requires->js_call_amd('local_sentaldocupload/bulk_upload', 'init', [
     $ajaxexpiryurl->out(false),
     sesskey(),
     $requestedcourseid,
-    [
-        'couldnotloadcourses' => get_string('couldnotloadcourses', 'local_sentaldocupload'),
-        'userhasnocourses' => get_string('userhasnocourses', 'local_sentaldocupload'),
-        'selectcourse' => get_string('selectcourse', 'local_sentaldocupload'),
-        'validitydays' => get_string('validitydays', 'local_sentaldocupload'),
-        'selectcourseafteruser' => get_string('selectcourseafteruser', 'local_sentaldocupload'),
-        'expirypreviewpending' => get_string('expirypreviewpending', 'local_sentaldocupload'),
-        'selectcoursefirstparticipants' => get_string('selectcoursefirstparticipants', 'local_sentaldocupload'),
-        'nousersfound' => get_string('nousersfound', 'local_sentaldocupload'),
-        'noadditionalusers' => get_string('noadditionalusers', 'local_sentaldocupload'),
-        'nomatchingusers' => get_string('nomatchingusers', 'local_sentaldocupload'),
-        'loadingcourses' => get_string('loadingcourses', 'local_sentaldocupload'),
-        'calculatingexpiry' => get_string('calculatingexpiry', 'local_sentaldocupload'),
-        'couldnotcalculateexpiry' => get_string('couldnotcalculateexpiry', 'local_sentaldocupload'),
-        'expirycalculated' => get_string('expirycalculated', 'local_sentaldocupload'),
-        'removeparticipant' => get_string('removeparticipant', 'local_sentaldocupload'),
-    ],
 ]);
 
 $documenttypes = [
@@ -177,24 +160,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'storedfile' => $storedfile,
                 'participantids' => $participantids,
             ];
-        }
-    }
-
-    // Public Profile rule for same submission:
-    // Only the first uploaded Type 1 course-completion document row may keep the
-    // Show in Public Profile value. Any other Type 1 document added through
-    // Add file is always stored privately, even if a forged POST sends the checkbox.
-    $firsttype1seen = false;
-    foreach ($uploadrows as $key => $row) {
-        if (($row['documenttype'] ?? '') !== 'type1') {
-            $uploadrows[$key]['showinpublic'] = 0;
-            continue;
-        }
-        if (!$firsttype1seen) {
-            $firsttype1seen = true;
-            $uploadrows[$key]['showinpublic'] = !empty($row['showinpublic']) ? 1 : 0;
-        } else {
-            $uploadrows[$key]['showinpublic'] = 0;
         }
     }
 
