@@ -143,6 +143,50 @@ $docsql = "SELECT v.id AS id,
          ORDER BY c.fullname ASC, d.documenttype ASC, d.id ASC, v.versionno DESC";
 $versions = $DB->get_records_sql($docsql, ['userid' => $userid, 'siteid' => SITEID]);
 
+$ncasignrows = [];
+if ($DB->get_manager()->table_exists('local_ncasign_jobs')) {
+    $ncasignsql = "SELECT f.id AS id,
+                          j.id AS jobid,
+                          j.courseid,
+                          c.fullname AS coursefullname,
+                          c.shortname AS courseshortname,
+                          j.documenttype,
+                          j.documenttitle,
+                          j.documentuuid,
+                          j.status,
+                          j.origin,
+                          j.timecreated AS jobtimecreated,
+                          j.manualcompleted,
+                          j.autosigned,
+                          f.filename AS signedfilename,
+                          f.timecreated AS filetimecreated,
+                          f.timemodified AS filetimemodified,
+                          cc.timecompleted AS completiontime
+                     FROM {local_ncasign_jobs} j
+                     JOIN {course} c ON c.id = j.courseid
+                     JOIN {files} f ON f.component = :component
+                                    AND f.filearea = :filearea
+                                    AND f.itemid = j.id
+                                    AND f.filename <> :dot
+                LEFT JOIN {course_completions} cc ON cc.course = j.courseid
+                                                 AND cc.userid = j.userid
+                    WHERE j.userid = :userid
+                      AND c.id <> :siteid
+                      AND j.status IN (:completedmanual, :completedauto)
+                      AND j.origin <> :demoorigin
+                 ORDER BY c.fullname ASC, j.timecreated DESC, f.id DESC";
+    $ncasignrows = $DB->get_records_sql($ncasignsql, [
+        'component' => 'local_ncasign',
+        'filearea' => 'signedpdf',
+        'dot' => '.',
+        'userid' => $userid,
+        'siteid' => SITEID,
+        'completedmanual' => 'completed_manual',
+        'completedauto' => 'completed_auto',
+        'demoorigin' => 'demo_job',
+    ]);
+}
+
 $courses = [];
 $documentsbycourse = [];
 $doccountbycourse = [];
@@ -172,11 +216,72 @@ foreach ($versions as $row) {
             'documentid' => $documentid,
             'documenttype' => $type,
             'label' => (string)($row->customlabel ?: ''),
+            'showlabel' => false,
             'versions' => [],
         ];
     }
 
     $documentsbycourse[$courseid][$type][$documentid]['versions'][] = $row;
+    $doccountbycourse[$courseid][$documentid] = true;
+}
+
+foreach ($ncasignrows as $row) {
+    $courseid = (int)$row->courseid;
+    $jobid = (int)$row->jobid;
+    $documentid = -$jobid;
+    $type = 'type1';
+
+    if (!isset($courses[$courseid])) {
+        $courses[$courseid] = (object)[
+            'id' => $courseid,
+            'fullname' => $row->coursefullname,
+            'shortname' => $row->courseshortname,
+        ];
+        $documentsbycourse[$courseid] = [];
+        $doccountbycourse[$courseid] = [];
+    }
+    if (!isset($documentsbycourse[$courseid][$type])) {
+        $documentsbycourse[$courseid][$type] = [];
+    }
+    if (isset($documentsbycourse[$courseid][$type][$documentid])) {
+        continue;
+    }
+
+    $documenttitle = trim((string)($row->documenttitle ?? ''));
+    $filename = trim((string)($row->signedfilename ?? ''));
+    $displayfilename = $documenttitle !== '' ? $documenttitle : $filename;
+    if ($displayfilename === '') {
+        $displayfilename = get_string('file', 'local_sentaldocupload');
+    }
+    if (strtolower(pathinfo($displayfilename, PATHINFO_EXTENSION)) !== 'pdf') {
+        $displayfilename .= '.pdf';
+    }
+
+    $issuedate = (int)($row->completiontime ?: $row->manualcompleted ?: $row->autosigned ?: $row->jobtimecreated ?: $row->filetimemodified);
+    $validitydays = local_sentaldocupload_get_course_validity_days($courseid);
+    $expirydate = local_sentaldocupload_calculate_expiry($issuedate, $validitydays);
+
+    $version = (object)[
+        'versionid' => -$jobid,
+        'versionno' => 1,
+        'filename' => $displayfilename,
+        'customlabel' => $documenttitle,
+        'versionlabel' => $documenttitle,
+        'issuedate' => $issuedate,
+        'expirydate' => $expirydate,
+        'timecreated' => (int)($row->filetimemodified ?: $row->filetimecreated ?: $row->jobtimecreated),
+        'uploaderfirstname' => 'SENTAL',
+        'uploaderlastname' => '',
+        'ncasignjobid' => $jobid,
+    ];
+
+    $documentsbycourse[$courseid][$type][$documentid] = [
+        'documentid' => $documentid,
+        'documenttype' => $type,
+        'label' => $documenttitle,
+        'showlabel' => $documenttitle !== '',
+        'versions' => [$version],
+    ];
     $doccountbycourse[$courseid][$documentid] = true;
 }
 
@@ -243,8 +348,12 @@ foreach ($courses as $course) {
                     'statushtml' => local_sentaldocupload_status_badge($status),
                     'uploadedat' => empty($row->timecreated) ? '-' : userdate((int)$row->timecreated, get_string('strftimedatetimeshort', 'langconfig')),
                     'uploadedby' => trim((string)$row->uploaderfirstname . ' ' . (string)$row->uploaderlastname),
-                    'downloadurl' => (new moodle_url('/local/sentaldocupload/download.php', ['versionid' => (int)$row->versionid]))->out(false),
-                    'viewurl' => (new moodle_url('/local/sentaldocupload/viewer.php', ['versionid' => (int)$row->versionid]))->out(false),
+                    'downloadurl' => !empty($row->ncasignjobid)
+                        ? (new moodle_url('/local/ncasign/download_artifact.php', ['jobid' => (int)$row->ncasignjobid, 'type' => 'signedpdf']))->out(false)
+                        : (new moodle_url('/local/sentaldocupload/download.php', ['versionid' => (int)$row->versionid]))->out(false),
+                    'viewurl' => !empty($row->ncasignjobid)
+                        ? (new moodle_url('/local/ncasign/download_artifact.php', ['jobid' => (int)$row->ncasignjobid, 'type' => 'signedpdf']))->out(false)
+                        : (new moodle_url('/local/sentaldocupload/viewer.php', ['versionid' => (int)$row->versionid]))->out(false),
                 ];
             }
             if (!empty($versionspayload)) {
@@ -252,6 +361,7 @@ foreach ($courses as $course) {
                     'documentid' => (int)$doc['documentid'],
                     'documenttype' => $type,
                     'label' => (string)$doc['label'],
+                    'showlabel' => !empty($doc['showlabel']),
                     'versions' => $versionspayload,
                 ];
             }
@@ -375,7 +485,7 @@ $PAGE->requires->js_init_code(<<<JS
             link.textContent = selected.filename;
             link.title = selected.filename;
             filetd.appendChild(link);
-            if (documentRow.label && (documentRow.__doctype || type) === 'type2') {
+            if (documentRow.label && (documentRow.showlabel || (documentRow.__doctype || type) === 'type2')) {
                 var label = document.createElement('div');
                 label.className = 'sental-student-file-label';
                 label.textContent = documentRow.label;
