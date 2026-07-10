@@ -19,61 +19,90 @@ $PAGE->requires->css(new moodle_url('/local/sentaldocupload/styles.css'));
 $courseimageurl = static function(int $courseid) use ($PAGE) : string {
     global $OUTPUT;
 
-    // 1) Moodle course overview image / Moodle course-card image.
+    $normaliseurl = static function($image): string {
+        if ($image instanceof moodle_url) {
+            return $image->out(false);
+        }
+        if (is_string($image) && trim($image) !== '') {
+            return trim($image);
+        }
+        return '';
+    };
+
+    $course = null;
     try {
-        if (class_exists('\\core_course\\external\\course_summary_exporter')) {
-            $course = get_course($courseid);
+        $course = get_course($courseid);
+    } catch (Throwable $e) {
+        $course = null;
+    }
+
+    // 1) First use the real uploaded course overview image, if the course has one.
+    try {
+        if ($course && class_exists('\\core_course\\external\\course_summary_exporter')) {
             $image = \core_course\external\course_summary_exporter::get_course_image($course);
-            if (!empty($image)) {
-                return (string)$image;
+            $image = $normaliseurl($image);
+            if ($image !== '') {
+                return $image;
             }
         }
     } catch (Throwable $e) {
-        // Continue to the next fallback.
+        // Continue to direct overviewfiles lookup.
     }
 
-    // 2) Direct overviewfiles fallback.
+    // 2) Direct Moodle course overviewfiles fallback.
     $context = context_course::instance($courseid, IGNORE_MISSING);
     if ($context) {
-        $fs = get_file_storage();
-        $files = $fs->get_area_files($context->id, 'course', 'overviewfiles', 0, 'sortorder, filepath, filename', false);
-        foreach ($files as $file) {
-            if ($file->is_directory()) {
-                continue;
+        try {
+            $fs = get_file_storage();
+            $files = $fs->get_area_files($context->id, 'course', 'overviewfiles', 0, 'sortorder, filepath, filename', false);
+            foreach ($files as $file) {
+                if ($file->is_directory()) {
+                    continue;
+                }
+                if (method_exists($file, 'is_valid_image') && !$file->is_valid_image()) {
+                    continue;
+                }
+                $url = moodle_url::make_pluginfile_url(
+                    $context->id,
+                    'course',
+                    'overviewfiles',
+                    0,
+                    $file->get_filepath(),
+                    $file->get_filename(),
+                    false
+                );
+                return $url->out(false);
             }
-            if (method_exists($file, 'is_valid_image') && !$file->is_valid_image()) {
-                continue;
-            }
-            $url = moodle_url::make_pluginfile_url(
-                $context->id,
-                'course',
-                'overviewfiles',
-                0,
-                $file->get_filepath(),
-                $file->get_filename(),
-                false
-            );
-            return $url->out(false);
+        } catch (Throwable $e) {
+            // Continue to Moodle generated image.
         }
     }
 
-    // 3) Moodle default generated course picture.
-    // This is what Moodle uses when a course has no uploaded overview image.
+    // 3) Use Moodle/theme generated course card image.
+    // This should match the default image Moodle shows on course cards when no overview image exists.
     try {
-        if (!empty($OUTPUT) && method_exists($OUTPUT, 'get_generated_image_for_id')) {
-            $generated = $OUTPUT->get_generated_image_for_id($courseid);
-            if ($generated instanceof moodle_url) {
-                return $generated->out(false);
-            }
-            if (is_string($generated) && $generated !== '') {
-                return $generated;
+        $renderers = [];
+        if (!empty($OUTPUT)) {
+            $renderers[] = $OUTPUT;
+        }
+        if (!empty($PAGE)) {
+            $renderers[] = $PAGE->get_renderer('core');
+        }
+
+        foreach ($renderers as $renderer) {
+            if ($renderer && method_exists($renderer, 'get_generated_image_for_id')) {
+                $generated = $renderer->get_generated_image_for_id($courseid);
+                $generated = $normaliseurl($generated);
+                if ($generated !== '') {
+                    return $generated;
+                }
             }
         }
     } catch (Throwable $e) {
-        // Continue to CSS fallback.
+        // Continue to plugin visual fallback.
     }
 
-    // 4) Last fallback: CSS generated placeholder.
+    // 4) Last fallback is CSS only, styled to match Moodle's default course-card image.
     return '';
 };
 
@@ -496,12 +525,14 @@ foreach ($courses as $course) {
         'data-courseid' => $courseid,
     ]);
     $imageurl = (string)($coursepayload[$courseid]['courseimage'] ?? '');
-    $hue = (($courseid * 47) % 360);
+    $cssimageurl = str_replace(["\\", "\"", "\n", "\r"], ["\\\\", "\\\"", "", ""], $imageurl);
+    $imageclass = 'sental-student-card-image ' . ($imageurl !== '' ? 'has-moodle-course-image' : 'is-moodle-default-fallback');
     $imagestyle = $imageurl !== ''
-        ? '--sental-course-image:url(' . s($imageurl) . ');'
-        : '--sental-course-image:none;--sental-course-hue:' . $hue . ';';
-    echo html_writer::div('', 'sental-student-card-image', [
-        'style' => $imagestyle
+        ? '--sental-course-image:url("' . s($cssimageurl) . '");'
+        : '--sental-course-image:none;';
+    echo html_writer::div('', $imageclass, [
+        'style' => $imagestyle,
+        'aria-label' => format_string($course->fullname),
     ]);
     echo html_writer::div(local_sentaldocupload_status_badge($status), 'sental-student-card-top');
     echo html_writer::tag('strong', format_string($course->fullname), ['class' => 'sental-student-course-title']);

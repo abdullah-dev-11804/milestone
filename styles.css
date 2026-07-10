@@ -2182,3 +2182,323 @@ a.sental-file-link i {
     background-size: cover, 76px 76px, 92px 92px, 86px 86px, 100px 100px, cover !important;
     background-position: center, 0 0, 36px 10px, 8px 42px, 55px 24px, center !important;
 }
+
+/* v0.10.1 - Audit Trail + Version History responsive table fix.
+   Requirement: keep the same desktop table view on mobile and only add horizontal scroll.
+   No mobile card conversion, no extra helper text, and no CSS inside audit.php/history.php. */
+
+/* Desktop/tablet: make sure wrappers can scroll if the screen is narrower than the table. */
+body.path-local-sentaldocupload .sental-history-table-wrap,
+body.path-local-sentaldocupload .sental-audit-table-wrap {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Keep table layout normal on all screens. */
+body.path-local-sentaldocupload table.sental-version-history,
+body.path-local-sentaldocupload table.sental-version-history-compact,
+body.path-local-sentaldocupload table.sental-audit-trail {
+    table-layout: auto;
+    border-collapse: collapse;
+}
+
+/* Mobile: do NOT change the table into cards.
+   Keep exact desktop-style columns and scroll horizontally inside the table wrapper. */
+@media (max-width: 780px) {
+    body.path-local-sentaldocupload .sental-results-container,
+    body.path-local-sentaldocupload .sental-ajax-results-inner {
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow-x: visible !important;
+    }
+
+    body.path-local-sentaldocupload .sental-history-table-wrap,
+    body.path-local-sentaldocupload .sental-audit-table-wrap {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        -webkit-overflow-scrolling: touch !important;
+        padding: 0 0 10px 0 !important;
+        margin: .75rem 0 1rem !important;
+        border: 1px solid #e3edf4 !important;
+        border-radius: 14px !important;
+        background: #ffffff !important;
+    }
+
+    body.path-local-sentaldocupload .sental-history-table-wrap::-webkit-scrollbar,
+    body.path-local-sentaldocupload .sental-audit-table-wrap::-webkit-scrollbar {
+        height: 8px;
+    }
+
+    body.path-local-sentaldocupload .sental-history-table-wrap::-webkit-scrollbar-track,
+    body.path-local-sentaldocupload .sental-audit-table-wrap::-webkit-scrollbar-track {
+        background: #edf2f6;
+        border-radius: 999px;
+    }
+
+    body.path-local-sentaldocupload .sental-history-table-wrap::-webkit-scrollbar-thumb,
+    body.path-local-sentaldocupload .sental-audit-table-wrap::-webkit-scrollbar-thumb {
+        background: #7d8a99;
+        border-radius: 999px;
+    }
+
+    body.path-local-sentaldocupload table.sental-version-history,
+    body.path-local-sentaldocupload table.sental-version-history-compact {
+        display: table !important;
+        width: 1250px !important;
+        min-width: 1250px !important;
+        max-width: none !important;
+        margin: 0 !important;
+        table-layout: fixed !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: #ffffff !important;
+        white-space: nowrap !important;
+    }
+
+    body.path-local-sentaldocupload table.sental-audit-trail {
+        display: table !important;
+        width: 1080px !important;
+        min-width: 1080px !important;
+        max-width: none !important;
+        margin: 0 !important;
+        table-layout: fixed !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: #ffffff !important;
+        white-space: nowrap !important;
+    }
+
+    body.path-local-sentaldocupload table.sental-version-history thead,
+    body.path-local-sentaldocupload table.sental-version-history-compact thead,
+    body.path-local-sentaldocupload table.sental-audit-trail thead {
+        display: table-header-group !important;
+        visibility: visible !important;
+        position: static !important;
+        height: auto !important;
+        width: auto !important;
+        clip: auto !important;
+        overflow: visible !important;
+    }
+
+    body.path-local-sentaldocupload table.sental-version-history tbody,
+    body.path-local-sentaldocupload table.sental-version-history-compact tbody,
+    body.path-local-sentaldocupload table.sental-audit-trail tbody {
+        display: table-row-group !important;
+    }
+
+    body.path-local-sentaldocupload table.sental-version-history tr,
+    body.path-local-sentaldocupload table.sental-version-history-compact tr,
+    body.path-local-sentaldocupload table.sental-audit-trail tr {
+        display: table-row !important;
+        width: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        background: transparent !important;
+    }
+
+    body.path-local-sentaldocupload table.sental-version-history th,
+    body.path-local-sentaldocupload table.sental-version-history-compact th,
+    body.path-local-sentaldocupload table.sental-audit-trail th,
+    body.path-local-sentaldocupload table.sental-version-history td,
+    body.path-local-sentaldocupload table.sental-version-history-compact td,
+    body.path-local-sentaldocupload table.sental-audit-trail td {
+        display: table-cell !important;
+        position: static !important;
+        width: auto !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        height: auto !important;
+        padding: 12px 14px !important;
+        border-bottom: 1px solid #e8eef4 !important;
+        text-align: left !important;
+        vertical-align: middle !important;
+        white-space: normal !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        word-break: normal !important;
+        overflow-wrap: normal !important;
+        color: inherit !important;
+        background: transparent !important;
+    }
+
+    body.path-local-sentaldocupload table.sental-version-history th,
+    body.path-local-sentaldocupload table.sental-version-history-compact th,
+    body.path-local-sentaldocupload table.sental-audit-trail th {
+        background: #f7fafc !important;
+        color: #1f2d3d !important;
+        font-weight: 800 !important;
+        white-space: normal !important;
+        line-height: 1.25 !important;
+    }
+
+    /* Completely remove old mobile-card labels/helper text. */
+    body.path-local-sentaldocupload table.sental-version-history::before,
+    body.path-local-sentaldocupload table.sental-version-history::after,
+    body.path-local-sentaldocupload table.sental-version-history-compact::before,
+    body.path-local-sentaldocupload table.sental-version-history-compact::after,
+    body.path-local-sentaldocupload table.sental-audit-trail::before,
+    body.path-local-sentaldocupload table.sental-audit-trail::after,
+    body.path-local-sentaldocupload table.sental-version-history td::before,
+    body.path-local-sentaldocupload table.sental-version-history td::after,
+    body.path-local-sentaldocupload table.sental-version-history-compact td::before,
+    body.path-local-sentaldocupload table.sental-version-history-compact td::after,
+    body.path-local-sentaldocupload table.sental-audit-trail td::before,
+    body.path-local-sentaldocupload table.sental-audit-trail td::after {
+        content: none !important;
+        display: none !important;
+    }
+
+    /* Column widths: same desktop-style table, but stable on mobile scroll. */
+    body.path-local-sentaldocupload table.sental-version-history th:nth-child(1),
+    body.path-local-sentaldocupload table.sental-version-history td:nth-child(1),
+    body.path-local-sentaldocupload table.sental-version-history-compact th:nth-child(1),
+    body.path-local-sentaldocupload table.sental-version-history-compact td:nth-child(1) { width: 170px !important; }
+
+    body.path-local-sentaldocupload table.sental-version-history th:nth-child(2),
+    body.path-local-sentaldocupload table.sental-version-history td:nth-child(2),
+    body.path-local-sentaldocupload table.sental-version-history-compact th:nth-child(2),
+    body.path-local-sentaldocupload table.sental-version-history-compact td:nth-child(2) { width: 170px !important; }
+
+    body.path-local-sentaldocupload table.sental-version-history th:nth-child(3),
+    body.path-local-sentaldocupload table.sental-version-history td:nth-child(3),
+    body.path-local-sentaldocupload table.sental-version-history-compact th:nth-child(3),
+    body.path-local-sentaldocupload table.sental-version-history-compact td:nth-child(3) { width: 145px !important; }
+
+    body.path-local-sentaldocupload table.sental-version-history th:nth-child(4),
+    body.path-local-sentaldocupload table.sental-version-history td:nth-child(4),
+    body.path-local-sentaldocupload table.sental-version-history-compact th:nth-child(4),
+    body.path-local-sentaldocupload table.sental-version-history-compact td:nth-child(4) { width: 150px !important; }
+
+    body.path-local-sentaldocupload table.sental-version-history th:nth-child(5),
+    body.path-local-sentaldocupload table.sental-version-history td:nth-child(5),
+    body.path-local-sentaldocupload table.sental-version-history-compact th:nth-child(5),
+    body.path-local-sentaldocupload table.sental-version-history-compact td:nth-child(5) { width: 120px !important; }
+
+    body.path-local-sentaldocupload table.sental-version-history th:nth-child(6),
+    body.path-local-sentaldocupload table.sental-version-history td:nth-child(6),
+    body.path-local-sentaldocupload table.sental-version-history-compact th:nth-child(6),
+    body.path-local-sentaldocupload table.sental-version-history-compact td:nth-child(6) { width: 120px !important; }
+
+    body.path-local-sentaldocupload table.sental-version-history th:nth-child(7),
+    body.path-local-sentaldocupload table.sental-version-history td:nth-child(7),
+    body.path-local-sentaldocupload table.sental-version-history-compact th:nth-child(7),
+    body.path-local-sentaldocupload table.sental-version-history-compact td:nth-child(7) { width: 115px !important; }
+
+    body.path-local-sentaldocupload table.sental-version-history th:nth-child(8),
+    body.path-local-sentaldocupload table.sental-version-history td:nth-child(8),
+    body.path-local-sentaldocupload table.sental-version-history-compact th:nth-child(8),
+    body.path-local-sentaldocupload table.sental-version-history-compact td:nth-child(8) { width: 135px !important; }
+
+    body.path-local-sentaldocupload table.sental-version-history th:nth-child(9),
+    body.path-local-sentaldocupload table.sental-version-history td:nth-child(9),
+    body.path-local-sentaldocupload table.sental-version-history-compact th:nth-child(9),
+    body.path-local-sentaldocupload table.sental-version-history-compact td:nth-child(9) { width: 135px !important; }
+
+    body.path-local-sentaldocupload table.sental-version-history th:nth-child(10),
+    body.path-local-sentaldocupload table.sental-version-history td:nth-child(10),
+    body.path-local-sentaldocupload table.sental-version-history-compact th:nth-child(10),
+    body.path-local-sentaldocupload table.sental-version-history-compact td:nth-child(10) { width: 260px !important; }
+
+    body.path-local-sentaldocupload table.sental-audit-trail th:nth-child(1),
+    body.path-local-sentaldocupload table.sental-audit-trail td:nth-child(1) { width: 180px !important; }
+
+    body.path-local-sentaldocupload table.sental-audit-trail th:nth-child(2),
+    body.path-local-sentaldocupload table.sental-audit-trail td:nth-child(2) { width: 180px !important; }
+
+    body.path-local-sentaldocupload table.sental-audit-trail th:nth-child(3),
+    body.path-local-sentaldocupload table.sental-audit-trail td:nth-child(3) { width: 135px !important; }
+
+    body.path-local-sentaldocupload table.sental-audit-trail th:nth-child(4),
+    body.path-local-sentaldocupload table.sental-audit-trail td:nth-child(4) { width: 260px !important; }
+
+    body.path-local-sentaldocupload table.sental-audit-trail th:nth-child(5),
+    body.path-local-sentaldocupload table.sental-audit-trail td:nth-child(5) { width: 180px !important; }
+
+    body.path-local-sentaldocupload table.sental-audit-trail th:nth-child(6),
+    body.path-local-sentaldocupload table.sental-audit-trail td:nth-child(6) { width: 145px !important; }
+
+    body.path-local-sentaldocupload table.sental-audit-trail th:nth-child(7),
+    body.path-local-sentaldocupload table.sental-audit-trail td:nth-child(7) { width: 200px !important; }
+
+    body.path-local-sentaldocupload table.sental-version-history .sental-table-mainlink,
+    body.path-local-sentaldocupload table.sental-version-history-compact .sental-table-mainlink,
+    body.path-local-sentaldocupload table.sental-audit-trail .sental-table-mainlink,
+    body.path-local-sentaldocupload table.sental-version-history .sental-file-link,
+    body.path-local-sentaldocupload table.sental-version-history-compact .sental-file-link,
+    body.path-local-sentaldocupload table.sental-audit-trail .sental-file-link,
+    body.path-local-sentaldocupload table.sental-version-history .sental-file-name-only,
+    body.path-local-sentaldocupload table.sental-version-history-compact .sental-file-name-only,
+    body.path-local-sentaldocupload table.sental-audit-trail .sental-audit-filename,
+    body.path-local-sentaldocupload table.sental-version-history .sental-version-filecell,
+    body.path-local-sentaldocupload table.sental-version-history-compact .sental-version-filecell {
+        display: inline-block !important;
+        max-width: 100% !important;
+        white-space: normal !important;
+        word-break: break-word !important;
+        overflow-wrap: anywhere !important;
+        vertical-align: middle !important;
+    }
+
+    body.path-local-sentaldocupload table.sental-version-history select,
+    body.path-local-sentaldocupload table.sental-version-history-compact select,
+    body.path-local-sentaldocupload table.sental-audit-trail select,
+    body.path-local-sentaldocupload table.sental-version-history .custom-select,
+    body.path-local-sentaldocupload table.sental-version-history-compact .custom-select,
+    body.path-local-sentaldocupload table.sental-audit-trail .custom-select {
+        width: 100% !important;
+        min-width: 120px !important;
+        max-width: 100% !important;
+    }
+
+    body.path-local-sentaldocupload .sental-filter-form .row {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+    }
+
+    body.path-local-sentaldocupload .sental-filter-form [class*="col-"] {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        margin-bottom: .75rem !important;
+    }
+
+    body.path-local-sentaldocupload .sental-filter-form .form-control,
+    body.path-local-sentaldocupload .sental-filter-form select,
+    body.path-local-sentaldocupload .sental-filter-form input[type="search"] {
+        min-height: 42px !important;
+        max-width: 100% !important;
+    }
+
+    body.path-local-sentaldocupload .sental-filter-form .btn,
+    body.path-local-sentaldocupload .sental-filter-reset {
+        min-height: 42px !important;
+        margin-bottom: .5rem !important;
+    }
+}
+
+@media (max-width: 480px) {
+    body.path-local-sentaldocupload .sental-history-table-wrap,
+    body.path-local-sentaldocupload .sental-audit-table-wrap {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+    }
+
+    body.path-local-sentaldocupload table.sental-version-history,
+    body.path-local-sentaldocupload table.sental-version-history-compact {
+        width: 1180px !important;
+        min-width: 1180px !important;
+    }
+
+    body.path-local-sentaldocupload table.sental-audit-trail {
+        width: 1030px !important;
+        min-width: 1030px !important;
+    }
+}
