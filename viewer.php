@@ -144,432 +144,246 @@ $pageindicator = get_string_manager()->string_exists('pageindicator', 'local_sen
     ? get_string('pageindicator', 'local_sentaldocupload', ['page' => '{page}', 'total' => '{total}'])
     : 'Page {page} / {total}';
 
-$PAGE->requires->js_init_code(<<<JS
-(function() {
-    function ready(fn) {
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', fn);
-        } else {
-            fn();
-        }
+
+// Prefer Moodle's bundled PDF.js when available, with a CDN fallback.
+$pdfjsscripturl = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+$pdfjsworkerurl = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+foreach ([
+    ['/lib/pdfjs/build/pdf.min.js', '/lib/pdfjs/build/pdf.worker.min.js'],
+    ['/lib/pdfjs/build/pdf.js', '/lib/pdfjs/build/pdf.worker.js'],
+] as $candidate) {
+    if (file_exists($CFG->dirroot . $candidate[0]) && file_exists($CFG->dirroot . $candidate[1])) {
+        $pdfjsscripturl = $CFG->wwwroot . $candidate[0];
+        $pdfjsworkerurl = $CFG->wwwroot . $candidate[1];
+        break;
     }
-
-    ready(function() {
-        var shell = document.getElementById('sv-shell');
-        var copyBtn = document.getElementById('sv-copy-link');
-        var loader = document.getElementById('sv-loader');
-        var errorBox = document.getElementById('sv-error');
-        var pages = document.getElementById('sv-pages');
-        var nativeFrame = document.getElementById('sv-native');
-        var image = document.getElementById('sv-image');
-
-        function hideLoader() {
-            if (loader) {
-                loader.style.display = 'none';
-            }
-        }
-
-        function showError(message) {
-            hideLoader();
-            if (errorBox) {
-                errorBox.style.display = 'block';
-                errorBox.textContent = message;
-            }
-            if (nativeFrame) {
-                nativeFrame.style.display = 'block';
-            }
-        }
-
-        if (copyBtn && shell) {
-            copyBtn.addEventListener('click', async function(e) {
-                e.preventDefault();
-                var shareUrl = shell.getAttribute('data-share-url') || window.location.href;
-                var originalText = copyBtn.getAttribute('data-original-text') || copyBtn.textContent;
-                var copiedText = copyBtn.getAttribute('data-copied-text') || 'Copied';
-
-                function markCopied() {
-                    copyBtn.textContent = copiedText;
-                    copyBtn.classList.add('sv-btn-copied');
-                    setTimeout(function() {
-                        copyBtn.textContent = originalText;
-                        copyBtn.classList.remove('sv-btn-copied');
-                    }, 1800);
-                }
-
-                try {
-                    if (navigator.clipboard && window.isSecureContext) {
-                        await navigator.clipboard.writeText(shareUrl);
-                        markCopied();
-                        return;
-                    }
-
-                    var textarea = document.createElement('textarea');
-                    textarea.value = shareUrl;
-                    textarea.setAttribute('readonly', 'readonly');
-                    textarea.style.position = 'fixed';
-                    textarea.style.top = '0';
-                    textarea.style.left = '0';
-                    textarea.style.width = '2em';
-                    textarea.style.height = '2em';
-                    textarea.style.padding = '0';
-                    textarea.style.border = '0';
-                    textarea.style.outline = '0';
-                    textarea.style.boxShadow = 'none';
-                    textarea.style.background = 'transparent';
-                    textarea.style.opacity = '0';
-                    document.body.appendChild(textarea);
-                    textarea.focus();
-                    textarea.select();
-                    textarea.setSelectionRange(0, textarea.value.length);
-                    var copied = document.execCommand('copy');
-                    document.body.removeChild(textarea);
-
-                    if (copied) {
-                        markCopied();
-                        return;
-                    }
-                } catch (err) {
-                    // Fall through to manual copy prompt below.
-                }
-
-                window.prompt('Copy this link:', shareUrl);
-            });
-        }
-
-        if (image) {
-            image.addEventListener('load', hideLoader);
-            image.addEventListener('error', function() {
-                showError('$fallbacktext');
-            });
-            setTimeout(hideLoader, 2500);
-            return;
-        }
-
-        if (!shell || shell.getAttribute('data-is-pdf') !== '1') {
-            if (nativeFrame) {
-                nativeFrame.addEventListener('load', hideLoader);
-                nativeFrame.style.display = 'block';
-            }
-            setTimeout(hideLoader, 2500);
-            return;
-        }
-
-        var pdfUrl = shell.getAttribute('data-pdf-url');
-        var pageTextTemplate = shell.getAttribute('data-page-template') || 'Page {page} / {total}';
-
-        function loadScript(url) {
-            return new Promise(function(resolve, reject) {
-                var script = document.createElement('script');
-                script.src = url;
-                script.onload = resolve;
-                script.onerror = reject;
-                document.head.appendChild(script);
-            });
-        }
-
-        async function loadPdfJs() {
-            if (window.pdfjsLib) {
-                return window.pdfjsLib;
-            }
-            var root = (window.M && M.cfg && M.cfg.wwwroot) ? M.cfg.wwwroot : '';
-            var urls = [
-                root + '/lib/pdfjs/build/pdf.min.js',
-                root + '/lib/pdfjs/build/pdf.js'
-            ];
-            for (var i = 0; i < urls.length; i++) {
-                try {
-                    await loadScript(urls[i]);
-                    if (window.pdfjsLib) {
-                        return window.pdfjsLib;
-                    }
-                } catch (e) {
-                    // Try next possible Moodle PDF.js path.
-                }
-            }
-            throw new Error('PDF.js could not be loaded');
-        }
-
-        async function renderPdf() {
-            try {
-                var pdfjsLib = await loadPdfJs();
-                var root = (window.M && M.cfg && M.cfg.wwwroot) ? M.cfg.wwwroot : '';
-
-                try {
-                    pdfjsLib.GlobalWorkerOptions.workerSrc = root + '/lib/pdfjs/build/pdf.worker.min.js';
-                } catch (e) {
-                    // Some PDF.js versions do not require this here.
-                }
-
-                var pdf = await pdfjsLib.getDocument({
-                    url: pdfUrl,
-                    withCredentials: true,
-                    disableAutoFetch: false,
-                    disableStream: false
-                }).promise;
-
-                if (!pages) {
-                    throw new Error('Viewer target missing');
-                }
-
-                pages.innerHTML = '';
-                var total = pdf.numPages;
-
-                for (var pageNumber = 1; pageNumber <= total; pageNumber++) {
-                    var page = await pdf.getPage(pageNumber);
-                    var baseViewport = page.getViewport({scale: 1});
-                    var containerWidth = Math.max(280, Math.min(pages.clientWidth || window.innerWidth, 1200));
-                    var scale = containerWidth / baseViewport.width;
-                    scale = Math.min(scale, window.devicePixelRatio && window.devicePixelRatio > 1 ? 2.2 : 1.8);
-                    var viewport = page.getViewport({scale: scale});
-
-                    var wrap = document.createElement('div');
-                    wrap.className = 'sv-page-wrap';
-
-                    var label = document.createElement('div');
-                    label.className = 'sv-page-label';
-                    label.textContent = pageTextTemplate.replace('{page}', pageNumber).replace('{total}', total);
-                    wrap.appendChild(label);
-
-                    var canvas = document.createElement('canvas');
-                    canvas.className = 'sv-page-canvas';
-                    canvas.width = Math.floor(viewport.width);
-                    canvas.height = Math.floor(viewport.height);
-                    canvas.style.width = Math.floor(viewport.width / scale * Math.min(scale, 1)) + 'px';
-                    canvas.style.maxWidth = '100%';
-                    canvas.style.height = 'auto';
-                    wrap.appendChild(canvas);
-                    pages.appendChild(wrap);
-
-                    await page.render({
-                        canvasContext: canvas.getContext('2d'),
-                        viewport: viewport
-                    }).promise;
-                }
-
-                hideLoader();
-            } catch (err) {
-                if (nativeFrame) {
-                    nativeFrame.src = pdfUrl;
-                }
-                showError('$fallbacktext');
-            }
-        }
-
-        renderPdf();
-    });
-})();
-JS, true);
+}
 
 echo $OUTPUT->header();
 ?>
 <style>
-    html, body {
-        width: 100%;
-        min-height: 100%;
-        margin: 0;
-        padding: 0;
-    }
-    body.path-local-sentaldocupload,
-    body.path-local-sentaldocupload #page,
-    body.path-local-sentaldocupload #page-wrapper,
-    body.path-local-sentaldocupload #page-content,
-    body.path-local-sentaldocupload #region-main,
-    body.path-local-sentaldocupload [role="main"] {
-        margin: 0 !important;
-        padding: 0 !important;
-        max-width: none !important;
-        width: 100% !important;
-        min-height: 100vh !important;
-        background: #1e2a3a !important;
-        overflow: hidden !important;
-    }
-    body.path-local-sentaldocupload #region-main > .card,
-    body.path-local-sentaldocupload #region-main > .card > .card-body {
-        margin: 0 !important;
-        padding: 0 !important;
-        border: 0 !important;
-        background: transparent !important;
-        box-shadow: none !important;
-    }
-    body.path-local-sentaldocupload header,
-    body.path-local-sentaldocupload footer,
-    body.path-local-sentaldocupload .navbar,
-    body.path-local-sentaldocupload #page-header,
-    body.path-local-sentaldocupload .breadcrumb,
-    body.path-local-sentaldocupload .secondary-navigation,
-    body.path-local-sentaldocupload .drawer-toggles,
-    body.path-local-sentaldocupload .activity-header {
-        display: none !important;
-    }
-    #sv-shell, #sv-shell * {
-        box-sizing: border-box;
-    }
-    #sv-shell {
-        width: 100%;
-        height: 100vh;
-        height: 100dvh;
-        display: flex;
-        flex-direction: column;
-        background: #1e2a3a;
-        color: #1e2a3a;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-        padding-top: env(safe-area-inset-top, 0px);
-        padding-bottom: env(safe-area-inset-bottom, 0px);
-        overflow: hidden;
-    }
-    #sv-bar {
-        flex: 0 0 auto;
-        min-height: 54px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 9px 10px;
-        background: #fff;
-        border-bottom: 1px solid #d6dde2;
-        box-shadow: 0 2px 10px rgba(0,0,0,.18);
-        z-index: 5;
-    }
-    #sv-title {
-        flex: 1 1 auto;
-        min-width: 0;
-        font-size: 14px;
-        font-weight: 800;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        color: #1e2a3a;
-    }
-    .sv-btn {
-        flex: 0 0 auto;
-        min-height: 34px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 8px;
-        padding: 7px 11px;
-        font-size: 12px;
-        line-height: 1;
-        font-weight: 800;
-        border: 1px solid transparent;
-        text-decoration: none !important;
-        cursor: pointer;
-        white-space: nowrap;
-        -webkit-tap-highlight-color: transparent;
-        appearance: none;
-    }
-    .sv-btn-back, .sv-btn-share, .sv-btn-native {
-        background: #f2f5f7;
-        border-color: #c9d3da;
-        color: #1e2a3a !important;
-    }
-    .sv-btn-dl, .sv-btn-copied {
-        background: #1e2a3a;
-        border-color: #1e2a3a;
-        color: #fff !important;
-    }
-    .sv-btn-dl {
-        background: #75b84f;
-        border-color: #75b84f;
-    }
-    #sv-main {
-        flex: 1 1 auto;
-        min-height: 0;
-        position: relative;
-        overflow: hidden;
-        background: #2c3e52;
-    }
-    #sv-scroll {
-        width: 100%;
-        height: 100%;
-        overflow-y: auto;
-        overflow-x: hidden;
-        -webkit-overflow-scrolling: touch;
-        overscroll-behavior: contain;
-        padding: 18px 10px 28px;
-        text-align: center;
-    }
-    .sv-page-wrap {
-        width: 100%;
-        margin: 0 auto 18px;
-        text-align: center;
-    }
-    .sv-page-label {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 24px;
-        margin: 0 auto 7px;
-        padding: 4px 10px;
-        border-radius: 999px;
-        background: rgba(255,255,255,.14);
-        color: #fff;
-        font-size: 12px;
-        font-weight: 700;
-    }
-    .sv-page-canvas, #sv-image {
-        display: block;
-        margin: 0 auto;
-        max-width: 100%;
-        height: auto;
-        background: #fff;
-        border-radius: 3px;
-        box-shadow: 0 5px 18px rgba(0,0,0,.45);
-    }
-    #sv-loader {
-        position: absolute;
-        inset: 0;
-        z-index: 4;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 14px;
-        padding: 18px;
-        background: #2c3e52;
-        color: #fff;
-        text-align: center;
-        font-size: 14px;
-        font-weight: 700;
-    }
-    .sv-spinner {
-        width: 42px;
-        height: 42px;
-        border: 4px solid rgba(255,255,255,.25);
-        border-top-color: #fff;
-        border-radius: 50%;
-        animation: sv-spin .75s linear infinite;
-    }
-    @keyframes sv-spin { to { transform: rotate(360deg); } }
-    #sv-native {
-        display: none;
-        width: 100%;
-        height: calc(100vh - 90px);
-        height: calc(100dvh - 90px);
-        border: 0;
-        background: #fff;
-        border-radius: 6px;
-        box-shadow: 0 5px 18px rgba(0,0,0,.45);
-    }
-    #sv-error {
-        display: none;
-        max-width: 760px;
-        margin: 0 auto 14px;
-        padding: 12px 14px;
-        border-radius: 10px;
-        background: #fff3cd;
-        color: #664d03;
-        text-align: left;
-        font-weight: 700;
-        font-size: 13px;
-    }
-    @media (max-width: 520px) {
-        #sv-bar { gap: 5px; padding: 7px 6px; min-height: 48px; }
-        #sv-title { font-size: 12px; }
-        .sv-btn { min-height: 31px; padding: 6px 8px; font-size: 11px; border-radius: 7px; }
-        #sv-scroll { padding: 12px 6px 22px; }
-        .sv-page-wrap { margin-bottom: 14px; }
-        #sv-native { height: calc(100vh - 72px); height: calc(100dvh - 72px); }
-    }
+* { box-sizing: border-box; }
+html, body, body.path-local-sentaldocupload {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    background: #1e2a3a !important;
+}
+body.path-local-sentaldocupload #page,
+body.path-local-sentaldocupload #page-wrapper,
+body.path-local-sentaldocupload #page-content,
+body.path-local-sentaldocupload #region-main,
+body.path-local-sentaldocupload #region-main-box,
+body.path-local-sentaldocupload #region-main-wrap,
+body.path-local-sentaldocupload [role="main"],
+body.path-local-sentaldocupload .container,
+body.path-local-sentaldocupload .container-fluid {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    background: transparent !important;
+}
+body.path-local-sentaldocupload #region-main > .card,
+body.path-local-sentaldocupload #region-main > .card > .card-body {
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+body.path-local-sentaldocupload header,
+body.path-local-sentaldocupload footer,
+body.path-local-sentaldocupload .navbar,
+body.path-local-sentaldocupload #page-header,
+body.path-local-sentaldocupload .breadcrumb,
+body.path-local-sentaldocupload .secondary-navigation,
+body.path-local-sentaldocupload .drawer-toggles,
+body.path-local-sentaldocupload .activity-header,
+body.path-local-sentaldocupload .activity-navigation {
+    display: none !important;
+}
+#sv-shell {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: #1e2a3a;
+    color: #1e2a3a;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+#sv-bar {
+    flex: 0 0 auto;
+    min-height: 54px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 10px;
+    overflow: hidden;
+    background: #fff;
+    border-bottom: 1px solid #d6dde2;
+    box-shadow: 0 2px 10px rgba(0,0,0,.18);
+    z-index: 5;
+}
+#sv-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    color: #1e2a3a;
+    font-size: 14px;
+    font-weight: 800;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.sv-btn {
+    flex: 0 0 auto;
+    min-height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    padding: 7px 11px;
+    font-size: 12px;
+    line-height: 1;
+    font-weight: 800;
+    border: 1px solid transparent;
+    text-decoration: none !important;
+    cursor: pointer;
+    white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+    appearance: none;
+}
+.sv-btn-back, .sv-btn-share, .sv-btn-native {
+    background: #f2f5f7;
+    border-color: #c9d3da;
+    color: #1e2a3a !important;
+}
+.sv-btn-dl {
+    background: #75b84f;
+    border-color: #75b84f;
+    color: #fff !important;
+}
+.sv-btn-copied {
+    background: #1e2a3a;
+    border-color: #1e2a3a;
+    color: #fff !important;
+}
+#sv-main {
+    flex: 1 1 0;
+    min-height: 0;
+    position: relative;
+    overflow: hidden;
+    background: #2c3e52;
+}
+#sv-scroll {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    padding: 18px 10px 28px;
+    text-align: center;
+}
+#sv-pages { width: 100%; }
+.sv-page-wrap {
+    width: 100%;
+    margin: 0 auto 18px;
+    text-align: center;
+}
+.sv-page-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 24px;
+    margin: 0 auto 7px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(255,255,255,.14);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+}
+.sv-page-canvas, #sv-image {
+    display: block;
+    margin: 0 auto;
+    max-width: 100%;
+    height: auto;
+    background: #fff;
+    border-radius: 3px;
+    box-shadow: 0 5px 18px rgba(0,0,0,.45);
+}
+#sv-loader {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 18px;
+    background: #2c3e52;
+    color: #fff;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 700;
+}
+.sv-spinner {
+    width: 42px;
+    height: 42px;
+    border: 4px solid rgba(255,255,255,.25);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: sv-spin .75s linear infinite;
+}
+@keyframes sv-spin { to { transform: rotate(360deg); } }
+#sv-native {
+    display: none;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: #fff;
+}
+#sv-error {
+    display: none;
+    max-width: 760px;
+    margin: 0 auto 14px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: #fff3cd;
+    color: #664d03;
+    text-align: left;
+    font-weight: 700;
+    font-size: 13px;
+}
+@media (max-width: 520px) {
+    #sv-bar { gap: 5px; padding: 7px 6px; min-height: 48px; }
+    #sv-title { font-size: 12px; }
+    .sv-btn { min-height: 31px; padding: 6px 8px; font-size: 11px; border-radius: 7px; }
+    #sv-scroll { padding: 12px 6px 22px; }
+    .sv-page-wrap { margin-bottom: 14px; }
+}
 </style>
 
 <div id="sv-shell"
@@ -581,9 +395,7 @@ echo $OUTPUT->header();
     <div id="sv-bar">
         <a href="javascript:history.back()" class="sv-btn sv-btn-back"><?php echo s($backtext); ?></a>
 
-        <div id="sv-title" title="<?php echo s($filename); ?>">
-            <?php echo s($filename); ?>
-        </div>
+        <div id="sv-title" title="<?php echo s($filename); ?>"><?php echo s($filename); ?></div>
 
         <button type="button"
                 id="sv-copy-link"
@@ -593,35 +405,264 @@ echo $OUTPUT->header();
             <?php echo s($copytext); ?>
         </button>
 
-        <a href="<?php echo s($previewurl->out(false)); ?>" target="_blank" rel="noopener" class="sv-btn sv-btn-native">
-            <?php echo s($pdftext); ?>
-        </a>
+        <?php if ($ispdf) { ?>
+            <button type="button" id="sv-native-btn" class="sv-btn sv-btn-native"><?php echo s($pdftext); ?></button>
+        <?php } else { ?>
+            <a href="<?php echo s($previewurl->out(false)); ?>" target="_blank" rel="noopener" class="sv-btn sv-btn-native">
+                <?php echo s($viewinbrowsertext); ?>
+            </a>
+        <?php } ?>
 
-        <a href="<?php echo s($downloadurl->out(false)); ?>" class="sv-btn sv-btn-dl">
-            <?php echo s($downloadtext); ?>
-        </a>
+        <a href="<?php echo s($downloadurl->out(false)); ?>" class="sv-btn sv-btn-dl"><?php echo s($downloadtext); ?></a>
     </div>
 
-    <div id="sv-main">
+    <main id="sv-main">
         <div id="sv-loader">
             <div class="sv-spinner"></div>
-            <div><?php echo s(get_string('loading', 'admin')); ?></div>
+            <div id="sv-loader-text"><?php echo s(get_string('loading', 'admin')); ?></div>
         </div>
 
         <div id="sv-scroll">
             <div id="sv-error"></div>
-
             <?php if ($isimage) { ?>
                 <img id="sv-image" src="<?php echo s($previewurl->out(false)); ?>" alt="<?php echo s($filename); ?>">
             <?php } else if ($ispdf) { ?>
                 <div id="sv-pages"></div>
-                <iframe id="sv-native" src="about:blank" title="<?php echo s($filename); ?>"></iframe>
-            <?php } else { ?>
-                <iframe id="sv-native" src="<?php echo s($previewurl->out(false)); ?>" title="<?php echo s($filename); ?>" style="display:block;"></iframe>
             <?php } ?>
         </div>
-    </div>
+
+        <iframe id="sv-native"
+                src="<?php echo (!$isimage && !$ispdf) ? s($previewurl->out(false)) : 'about:blank'; ?>"
+                title="<?php echo s($filename); ?>"></iframe>
+    </main>
 </div>
+
+<script>
+(function () {
+    'use strict';
+
+    var shell = document.getElementById('sv-shell');
+    var copyBtn = document.getElementById('sv-copy-link');
+    var loader = document.getElementById('sv-loader');
+    var loaderText = document.getElementById('sv-loader-text');
+    var errorBox = document.getElementById('sv-error');
+    var pages = document.getElementById('sv-pages');
+    var scrollEl = document.getElementById('sv-scroll');
+    var nativeFrame = document.getElementById('sv-native');
+    var nativeBtn = document.getElementById('sv-native-btn');
+    var image = document.getElementById('sv-image');
+
+    var PDFJS_SCRIPT = <?php echo json_encode($pdfjsscripturl, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+    var PDFJS_WORKER = <?php echo json_encode($pdfjsworkerurl, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+    var FALLBACK_TEXT = <?php echo json_encode($fallbacktext, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+
+    function hideLoader() {
+        if (loader) { loader.style.display = 'none'; }
+    }
+
+    function setLoading(text) {
+        if (loader) { loader.style.display = 'flex'; }
+        if (loaderText && text) { loaderText.textContent = text; }
+    }
+
+    function showNativeViewer(reason) {
+        if (reason) { console.warn('[sental document viewer]', reason); }
+        hideLoader();
+        if (scrollEl) { scrollEl.style.display = 'none'; }
+        if (nativeFrame) {
+            nativeFrame.style.display = 'block';
+            if (nativeFrame.getAttribute('src') === 'about:blank') {
+                var pdfUrl = shell.getAttribute('data-pdf-url');
+                nativeFrame.src = pdfUrl + '#page=1&view=FitH&toolbar=1&navpanes=0';
+            }
+        }
+    }
+
+    function showCanvasViewer() {
+        if (nativeFrame) { nativeFrame.style.display = 'none'; }
+        if (scrollEl) { scrollEl.style.display = 'block'; }
+    }
+
+    function showError(message) {
+        if (errorBox) {
+            errorBox.style.display = 'block';
+            errorBox.textContent = message || FALLBACK_TEXT;
+        }
+    }
+
+    function loadScript(src) {
+        return new Promise(function (resolve, reject) {
+            var script = document.createElement('script');
+            var complete = false;
+            var timer = window.setTimeout(function () {
+                if (complete) { return; }
+                complete = true;
+                reject(new Error('PDF.js loading timeout'));
+            }, 10000);
+
+            script.src = src;
+            script.onload = function () {
+                if (complete) { return; }
+                complete = true;
+                window.clearTimeout(timer);
+                resolve();
+            };
+            script.onerror = function () {
+                if (complete) { return; }
+                complete = true;
+                window.clearTimeout(timer);
+                reject(new Error('PDF.js script failed'));
+            };
+            document.head.appendChild(script);
+        });
+    }
+
+    async function renderPdf() {
+        var pdfUrl = shell.getAttribute('data-pdf-url');
+        var pageTemplate = shell.getAttribute('data-page-template') || 'Page {page} / {total}';
+
+        setLoading('Loading document…');
+        if (!window.pdfjsLib) {
+            await loadScript(PDFJS_SCRIPT);
+        }
+        if (!window.pdfjsLib) {
+            throw new Error('PDF.js library not available');
+        }
+
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+
+        // Moodle file endpoints can behave inconsistently with partial range requests.
+        // Fetching the complete stream prevents missing or misaligned pages on iOS Safari.
+        var pdf = await window.pdfjsLib.getDocument({
+            url: pdfUrl,
+            withCredentials: true,
+            disableRange: true,
+            disableStream: true,
+            disableAutoFetch: true,
+            isEvalSupported: false
+        }).promise;
+
+        var total = pdf.numPages || 0;
+        if (!total || !pages) {
+            throw new Error('No PDF pages were found');
+        }
+
+        pages.innerHTML = '';
+        showCanvasViewer();
+        if (errorBox) { errorBox.style.display = 'none'; }
+
+        var availableWidth = Math.max(280, Math.min((scrollEl ? scrollEl.clientWidth : window.innerWidth) - 20, 980));
+
+        for (var pageNo = 1; pageNo <= total; pageNo++) {
+            setLoading('Rendering ' + pageNo + ' / ' + total + '…');
+
+            var page = await pdf.getPage(pageNo);
+            var baseViewport = page.getViewport({ scale: 1 });
+            var scale = availableWidth / baseViewport.width;
+            scale = Math.max(0.45, Math.min(scale, 1.75));
+            var viewport = page.getViewport({ scale: scale });
+            var dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+            var wrap = document.createElement('section');
+            wrap.className = 'sv-page-wrap';
+
+            var label = document.createElement('div');
+            label.className = 'sv-page-label';
+            label.textContent = pageTemplate.replace('{page}', pageNo).replace('{total}', total);
+            wrap.appendChild(label);
+
+            var canvas = document.createElement('canvas');
+            canvas.className = 'sv-page-canvas';
+
+            var cssWidth = Math.floor(viewport.width);
+            var cssHeight = Math.floor(viewport.height);
+            canvas.width = Math.floor(cssWidth * dpr);
+            canvas.height = Math.floor(cssHeight * dpr);
+            canvas.style.width = cssWidth + 'px';
+            canvas.style.height = cssHeight + 'px';
+
+            wrap.appendChild(canvas);
+            pages.appendChild(wrap);
+
+            var context = canvas.getContext('2d', { alpha: false });
+            context.setTransform(dpr, 0, 0, dpr, 0, 0);
+            await page.render({ canvasContext: context, viewport: viewport }).promise;
+        }
+
+        hideLoader();
+    }
+
+    if (copyBtn && shell) {
+        copyBtn.addEventListener('click', function (event) {
+            event.preventDefault();
+            var shareUrl = shell.getAttribute('data-share-url') || window.location.href;
+            var originalText = copyBtn.getAttribute('data-original-text') || copyBtn.textContent;
+            var copiedText = copyBtn.getAttribute('data-copied-text') || 'Copied';
+
+            function markCopied() {
+                copyBtn.textContent = copiedText;
+                copyBtn.classList.add('sv-btn-copied');
+                window.setTimeout(function () {
+                    copyBtn.textContent = originalText;
+                    copyBtn.classList.remove('sv-btn-copied');
+                }, 1800);
+            }
+
+            function fallbackCopy(text) {
+                var textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.setAttribute('readonly', 'readonly');
+                textarea.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+                document.body.appendChild(textarea);
+                textarea.focus();
+                textarea.select();
+                try { document.execCommand('copy'); } catch (e) {}
+                document.body.removeChild(textarea);
+            }
+
+            if (navigator.share) {
+                navigator.share({ title: document.title, url: shareUrl }).catch(function () {});
+                return;
+            }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(shareUrl).then(markCopied).catch(function () {
+                    fallbackCopy(shareUrl);
+                    markCopied();
+                });
+            } else {
+                fallbackCopy(shareUrl);
+                markCopied();
+            }
+        });
+    }
+
+    if (nativeBtn) {
+        nativeBtn.addEventListener('click', function () {
+            showNativeViewer('manual native viewer');
+        });
+    }
+
+    if (image) {
+        image.addEventListener('load', hideLoader);
+        image.addEventListener('error', function () {
+            showError(FALLBACK_TEXT);
+            hideLoader();
+        });
+        window.setTimeout(hideLoader, 2500);
+    } else if (shell && shell.getAttribute('data-is-pdf') === '1') {
+        renderPdf().catch(function (error) {
+            console.error('[sental document viewer]', error);
+            showError(FALLBACK_TEXT);
+            showNativeViewer(error && error.message ? error.message : 'PDF.js failed');
+        });
+    } else {
+        if (nativeFrame) {
+            nativeFrame.style.display = 'block';
+            nativeFrame.addEventListener('load', hideLoader);
+        }
+        window.setTimeout(hideLoader, 2500);
+    }
+})();
+</script>
 <?php
-// Keep Moodle footer for JS requirements, but it is hidden by the embedded/full-screen layout CSS above.
 echo $OUTPUT->footer();
