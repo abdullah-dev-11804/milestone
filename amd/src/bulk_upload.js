@@ -33,7 +33,7 @@ define([], function() {
     }
 
     return {
-        init: function(coursesUrl, expiryUrl, sesskey, preferredCourseId, labels) {
+        init: function(coursesUrl, expiryUrl, sesskey, preferredCourseId, labels, edsConflictUrl) {
             labels = labels || {};
             var company = document.getElementById('id_companyid');
             var userInput = document.getElementById('id_usercombo');
@@ -43,10 +43,14 @@ define([], function() {
             var issueDate = document.getElementById('id_issuedate');
             var submit = document.getElementById('id_submitbutton');
             var preview = document.getElementById('id_expirypreview');
+            var edsConflictWarning = document.getElementById('id_eds_conflict_warning');
             var addRowButton = document.getElementById('id_add_document_row');
             var noResultsNode = null;
             var courseParticipants = {};
             var selectedCourseHasEds = false;
+            var edsConflictBlocked = false;
+            var edsConflictChecking = false;
+            var edsConflictRequest = 0;
             preferredCourseId = parseInt(preferredCourseId || 0, 10) || 0;
 
             function setPreview(text, type) {
@@ -54,6 +58,22 @@ define([], function() {
                     preview.textContent = text;
                     preview.className = 'alert alert-' + (type || 'info');
                 }
+            }
+
+            function setEdsConflictWarning(text, type) {
+                if (!edsConflictWarning) {
+                    return;
+                }
+                if (!text) {
+                    edsConflictWarning.textContent = '';
+                    edsConflictWarning.style.display = 'none';
+                    edsConflictWarning.setAttribute('aria-hidden', 'true');
+                    return;
+                }
+                edsConflictWarning.textContent = text;
+                edsConflictWarning.className = 'alert alert-' + (type || 'warning');
+                edsConflictWarning.style.display = '';
+                edsConflictWarning.setAttribute('aria-hidden', 'false');
             }
 
             function visibleRows() {
@@ -74,14 +94,18 @@ define([], function() {
             function updateAvailability() {
                 var canPickFiles = hasValue(user) && hasValue(course) && hasValue(issueDate);
                 Array.prototype.slice.call(document.querySelectorAll('.sental-filemanager-wrap')).forEach(function(wrap) {
-                    if (canPickFiles) {
+                    var row = wrap.closest ? wrap.closest('.sental-document-row') : null;
+                    var rownum = row ? row.getAttribute('data-row') : '';
+                    var documentType = rownum !== '' ? document.getElementById('id_documenttype' + rownum) : null;
+                    var rowBlocked = (edsConflictBlocked || edsConflictChecking) && documentType && documentType.value === 'type1';
+                    if (canPickFiles && !rowBlocked) {
                         wrap.classList.remove('sental-filemanager-disabled');
                     } else {
                         wrap.classList.add('sental-filemanager-disabled');
                     }
                 });
                 if (submit) {
-                    submit.disabled = !canPickFiles;
+                    submit.disabled = !canPickFiles || edsConflictBlocked || edsConflictChecking;
                 }
                 updateRowButtons();
             }
@@ -161,6 +185,9 @@ define([], function() {
                 }
                 resetCourses(labels.selectcourseafteruser || 'Select user first');
                 setPreview(labels.expirypreviewpending || 'Select course and issue date to calculate expiry date.', 'info');
+                edsConflictBlocked = false;
+                edsConflictChecking = false;
+                setEdsConflictWarning('', 'warning');
                 updateAvailability();
             }
 
@@ -189,6 +216,93 @@ define([], function() {
                     selected: document.getElementById('id_participant_selected' + rownum),
                     hidden: document.getElementById('id_participant_hidden' + rownum)
                 };
+            }
+
+            function selectedType1UserIds() {
+                if (!hasValue(user) || !hasValue(course)) {
+                    return [];
+                }
+
+                var ids = [];
+                visibleRows().forEach(function(row) {
+                    var rownum = row.getAttribute('data-row');
+                    var documentType = document.getElementById('id_documenttype' + rownum);
+                    if (!documentType || documentType.value !== 'type1') {
+                        return;
+                    }
+                    ids.push(String(user.value));
+                    getSelectedParticipantIds(rownum).forEach(function(participantId) {
+                        ids.push(String(participantId));
+                    });
+                });
+
+                return ids.filter(function(id, index) {
+                    return id && ids.indexOf(id) === index;
+                });
+            }
+
+            function checkEdsConflict() {
+                if (!edsConflictUrl) {
+                    edsConflictBlocked = false;
+                    edsConflictChecking = false;
+                    setEdsConflictWarning('', 'warning');
+                    updateAvailability();
+                    return;
+                }
+
+                var userIds = selectedType1UserIds();
+                if (!hasValue(course) || !userIds.length) {
+                    edsConflictBlocked = false;
+                    edsConflictChecking = false;
+                    setEdsConflictWarning('', 'warning');
+                    updateAvailability();
+                    return;
+                }
+
+                var requestId = ++edsConflictRequest;
+                edsConflictChecking = true;
+                setEdsConflictWarning(labels.edsconflictchecking || 'Checking existing EDS certificates...', 'info');
+                updateAvailability();
+
+                var separator = edsConflictUrl.indexOf('?') === -1 ? '?' : '&';
+                var url = edsConflictUrl + separator + 'sesskey=' + encodeURIComponent(sesskey) +
+                    '&courseid=' + encodeURIComponent(course.value);
+                if (company && company.value) {
+                    url += '&companyid=' + encodeURIComponent(company.value);
+                }
+                if (preferredCourseId) {
+                    url += '&requestedcourseid=' + encodeURIComponent(preferredCourseId);
+                }
+                userIds.forEach(function(userid) {
+                    url += '&userids[]=' + encodeURIComponent(userid);
+                });
+
+                var xhr = new XMLHttpRequest();
+                xhr.open('GET', url);
+                xhr.onreadystatechange = function() {
+                    if (xhr.readyState !== 4 || requestId !== edsConflictRequest) {
+                        return;
+                    }
+                    if (xhr.status !== 200) {
+                        edsConflictBlocked = false;
+                        edsConflictChecking = false;
+                        setEdsConflictWarning(labels.edsconflictcheckfailed || 'Could not check existing EDS certificates. The upload will still be checked before saving.', 'warning');
+                        updateAvailability();
+                        return;
+                    }
+                    try {
+                        var data = JSON.parse(xhr.responseText);
+                        edsConflictChecking = false;
+                        edsConflictBlocked = !!(data.success && data.blocked);
+                        setEdsConflictWarning(edsConflictBlocked ? data.message : '', edsConflictBlocked ? 'warning' : 'warning');
+                    } catch (e) {
+                        edsConflictChecking = false;
+                        edsConflictBlocked = false;
+                        setEdsConflictWarning(labels.edsconflictcheckfailed || 'Could not check existing EDS certificates. The upload will still be checked before saving.', 'warning');
+                    }
+                    updateAvailability();
+                };
+                xhr.send();
             }
 
             function getSelectedParticipantIds(rownum) {
@@ -332,6 +446,7 @@ define([], function() {
                     els.input.focus();
                 }
                 filterParticipantDropdown(rownum, true);
+                checkEdsConflict();
             }
 
             function removeSelectedParticipant(rownum, participantId) {
@@ -350,6 +465,7 @@ define([], function() {
                     }
                 });
                 filterParticipantDropdown(rownum, true);
+                checkEdsConflict();
             }
 
             function clearParticipantSelections(row) {
@@ -365,6 +481,7 @@ define([], function() {
                     els.input.value = '';
                 }
                 closeParticipantDropdown(rownum);
+                checkEdsConflict();
             }
 
             function selectParticipantFromOption(optionNode) {
@@ -394,7 +511,7 @@ define([], function() {
                 visibleRows().forEach(function(row) {
                     var rownum = row.getAttribute('data-row');
                     var documentType = document.getElementById('id_documenttype' + rownum);
-                    if (documentType && documentType.value === 'type1' && firstVisibleType1Row === null) {
+                if (documentType && documentType.value === 'type1' && firstVisibleType1Row === null) {
                         firstVisibleType1Row = rownum;
                     }
                 });
@@ -430,6 +547,7 @@ define([], function() {
                         }
                     }
                 });
+                checkEdsConflict();
             }
 
             function loadCourses() {
@@ -506,6 +624,7 @@ define([], function() {
                     updateDocumentTypeUI();
                     calculateExpiry();
                     updateAvailability();
+                    checkEdsConflict();
                 };
                 xhr.send();
             }
@@ -553,6 +672,7 @@ define([], function() {
                 renderParticipantDropdown(next);
                 updateDocumentTypeUI();
                 updateRowButtons();
+                checkEdsConflict();
             }
 
             function hideDocumentRow(row) {
@@ -563,6 +683,7 @@ define([], function() {
                 row.style.display = 'none';
                 row.setAttribute('aria-hidden', 'true');
                 updateRowButtons();
+                checkEdsConflict();
             }
 
             if (userInput) {
@@ -643,6 +764,7 @@ define([], function() {
                     refreshAllParticipantDropdowns();
                     updateDocumentTypeUI();
                     calculateExpiry();
+                    checkEdsConflict();
                 });
             }
 
@@ -659,6 +781,7 @@ define([], function() {
                 var typeSelect = event.target.closest ? event.target.closest('.sental-row-documenttype') : null;
                 if (typeSelect) {
                     updateDocumentTypeUI();
+                    checkEdsConflict();
                 }
             });
 
@@ -699,6 +822,7 @@ define([], function() {
             filterUsers(false);
             updateDocumentTypeUI();
             updateAvailability();
+            checkEdsConflict();
         }
     };
 });

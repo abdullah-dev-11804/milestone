@@ -31,11 +31,17 @@ $PAGE->set_heading(get_string('manualdocumentupload', 'local_sentaldocupload'));
 $PAGE->requires->css(new moodle_url('/local/sentaldocupload/styles.css'));
 $ajaxcoursesurl = new moodle_url('/local/sentaldocupload/ajax_courses.php', $requestedcourseid > 0 ? ['courseid' => $requestedcourseid] : []);
 $ajaxexpiryurl = new moodle_url('/local/sentaldocupload/ajax_expiry.php');
+$ajaxedsconflicturl = new moodle_url('/local/sentaldocupload/ajax_eds_conflict.php');
 $PAGE->requires->js_call_amd('local_sentaldocupload/bulk_upload', 'init', [
     $ajaxcoursesurl->out(false),
     $ajaxexpiryurl->out(false),
     sesskey(),
     $requestedcourseid,
+    [
+        'edsconflictchecking' => get_string('edsconflictchecking', 'local_sentaldocupload'),
+        'edsconflictcheckfailed' => get_string('edsconflictcheckfailed', 'local_sentaldocupload'),
+    ],
+    $ajaxedsconflicturl->out(false),
 ]);
 
 $documenttypes = [
@@ -491,6 +497,12 @@ echo html_writer::empty_tag('input', ['type' => 'date', 'name' => 'issuedate', '
 echo html_writer::end_div();
 
 echo html_writer::div(get_string('expirypreviewpending', 'local_sentaldocupload'), 'alert alert-info', ['id' => 'id_expirypreview', 'role' => 'status']);
+echo html_writer::div('', 'alert alert-warning', [
+    'id' => 'id_eds_conflict_warning',
+    'role' => 'alert',
+    'style' => 'display:none;',
+    'aria-hidden' => 'true',
+]);
 
 echo html_writer::start_div('sental-document-upload-section mt-4');
 echo html_writer::tag('h4', get_string('documentfiles', 'local_sentaldocupload'));
