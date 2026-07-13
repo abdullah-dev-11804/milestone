@@ -6,7 +6,8 @@ require_once(__DIR__ . '/../../config.php');
 require_once($CFG->libdir . '/filelib.php');
 require_once(__DIR__ . '/lib.php');
 
-$versionid = required_param('versionid', PARAM_INT);
+$versionid = optional_param('versionid', 0, PARAM_INT);
+$ncasignjobid = optional_param('ncasignjobid', 0, PARAM_INT);
 $public = optional_param('public', 0, PARAM_BOOL);
 $userid = optional_param('userid', 0, PARAM_INT);
 $courseid = optional_param('courseid', 0, PARAM_INT);
@@ -14,11 +15,13 @@ $courseid = optional_param('courseid', 0, PARAM_INT);
 $context = context_system::instance();
 
 $record = null;
+$file = null;
 $canmanage = false;
 $ispublicviewer = false;
+$isncasignviewer = false;
 
 if ($public) {
-    if (empty($userid) || empty($courseid)) {
+    if (empty($versionid) || empty($userid) || empty($courseid)) {
         throw new moodle_exception('filenotfound');
     }
 
@@ -39,48 +42,100 @@ if ($public) {
     require_login();
     $canmanage = has_capability('local/sentaldocupload:manage', $context);
 
-    $sql = "SELECT v.id AS id,
-                   v.id AS versionid,
-                   v.documentid,
-                   v.versionno,
-                   v.filename,
-                   v.issuedate,
-                   v.expirydate,
-                   d.courseid,
-                   d.documenttype,
-                   c.fullname AS coursefullname,
-                   c.shortname AS courseshortname,
-                   du.userid
-              FROM {sental_modeb_doc_version} v
-              JOIN {sental_modeb_doc} d ON d.id = v.documentid
-              JOIN {course} c ON c.id = d.courseid
-              JOIN {sental_modeb_doc_user} du ON du.documentid = d.id
-             WHERE v.id = :versionid";
-    $records = $DB->get_records_sql($sql, ['versionid' => $versionid]);
-    if (!$records) {
-        throw new moodle_exception('filenotfound');
-    }
-
-    $ownsdocument = false;
-    foreach ($records as $candidate) {
-        if ((int)$candidate->userid === (int)$USER->id) {
-            $record = $candidate;
-            $ownsdocument = true;
-            break;
+    if ($ncasignjobid > 0) {
+        $job = $DB->get_record('local_ncasign_jobs', ['id' => $ncasignjobid], '*', IGNORE_MISSING);
+        if (!$job) {
+            throw new moodle_exception('filenotfound');
         }
-    }
-    if (!$record) {
-        $record = reset($records);
-    }
 
-    if (!$canmanage && !$ownsdocument) {
-        throw new required_capability_exception($context, 'local/sentaldocupload:manage', 'nopermissions', 'error');
+        $coursecontext = context_course::instance((int)$job->courseid, IGNORE_MISSING);
+        $ownsdocument = ((int)$job->userid === (int)$USER->id);
+        $isenrolledincourse = ($coursecontext && is_enrolled($coursecontext, $USER, '', true));
+        if (!$canmanage && !$ownsdocument && !$isenrolledincourse) {
+            throw new required_capability_exception($context, 'local/sentaldocupload:manage', 'nopermissions', 'error');
+        }
+
+        $course = $DB->get_record('course', ['id' => (int)$job->courseid], 'id,fullname,shortname', MUST_EXIST);
+        $fs = get_file_storage();
+        $files = $fs->get_area_files($context->id, 'local_ncasign', 'signedpdf', $ncasignjobid, 'id DESC', false);
+        $file = reset($files);
+        if (!$file) {
+            throw new moodle_exception('filenotfound');
+        }
+
+        $completiontime = (int)$DB->get_field('course_completions', 'timecompleted', [
+            'course' => (int)$job->courseid,
+            'userid' => (int)$job->userid,
+        ], IGNORE_MISSING);
+        $issuedate = (int)($completiontime ?: $job->manualcompleted ?: $job->autosigned ?: $job->timecreated);
+        $validitydays = local_sentaldocupload_get_course_validity_days((int)$job->courseid);
+        $expirydate = local_sentaldocupload_calculate_expiry($issuedate, $validitydays);
+
+        $record = (object)[
+            'id' => -$ncasignjobid,
+            'versionid' => -$ncasignjobid,
+            'documentid' => -$ncasignjobid,
+            'versionno' => 1,
+            'filename' => $file->get_filename(),
+            'issuedate' => $issuedate,
+            'expirydate' => $expirydate,
+            'courseid' => (int)$job->courseid,
+            'documenttype' => 'type1',
+            'coursefullname' => $course->fullname,
+            'courseshortname' => $course->shortname,
+            'userid' => (int)$job->userid,
+        ];
+        $isncasignviewer = true;
+    } else {
+        if (empty($versionid)) {
+            throw new moodle_exception('filenotfound');
+        }
+
+        $sql = "SELECT v.id AS id,
+                       v.id AS versionid,
+                       v.documentid,
+                       v.versionno,
+                       v.filename,
+                       v.issuedate,
+                       v.expirydate,
+                       d.courseid,
+                       d.documenttype,
+                       c.fullname AS coursefullname,
+                       c.shortname AS courseshortname,
+                       du.userid
+                  FROM {sental_modeb_doc_version} v
+                  JOIN {sental_modeb_doc} d ON d.id = v.documentid
+                  JOIN {course} c ON c.id = d.courseid
+                  JOIN {sental_modeb_doc_user} du ON du.documentid = d.id
+                 WHERE v.id = :versionid";
+        $records = $DB->get_records_sql($sql, ['versionid' => $versionid]);
+        if (!$records) {
+            throw new moodle_exception('filenotfound');
+        }
+
+        $ownsdocument = false;
+        foreach ($records as $candidate) {
+            if ((int)$candidate->userid === (int)$USER->id) {
+                $record = $candidate;
+                $ownsdocument = true;
+                break;
+            }
+        }
+        if (!$record) {
+            $record = reset($records);
+        }
+
+        if (!$canmanage && !$ownsdocument) {
+            throw new required_capability_exception($context, 'local/sentaldocupload:manage', 'nopermissions', 'error');
+        }
     }
 }
 
 $fs = get_file_storage();
-$files = $fs->get_area_files($context->id, 'local_sentaldocupload', 'document', $versionid, 'filename', false);
-$file = reset($files);
+if (!$file) {
+    $files = $fs->get_area_files($context->id, 'local_sentaldocupload', 'document', $versionid, 'filename', false);
+    $file = reset($files);
+}
 if (!$file) {
     throw new moodle_exception('filenotfound');
 }
@@ -93,7 +148,7 @@ $formatdate = static function($timestamp) {
     return empty($timestamp) ? get_string('noexpiry', 'local_sentaldocupload') : userdate((int)$timestamp, get_string('strftimedate', 'langconfig'));
 };
 
-$params = ['versionid' => $versionid];
+$params = $isncasignviewer ? ['ncasignjobid' => $ncasignjobid] : ['versionid' => $versionid];
 if ($ispublicviewer) {
     $params['public'] = 1;
     $params['userid'] = $userid;
@@ -107,7 +162,17 @@ $PAGE->set_heading(get_string('documentviewer', 'local_sentaldocupload'));
 $PAGE->set_pagelayout('embedded');
 $PAGE->requires->css(new moodle_url('/local/sentaldocupload/styles.css'));
 
-if ($ispublicviewer) {
+if ($isncasignviewer) {
+    $previewurl = new moodle_url('/local/ncasign/download_artifact.php', [
+        'jobid' => $ncasignjobid,
+        'type' => 'signedpdf',
+        'inline' => 1,
+    ]);
+    $downloadurl = new moodle_url('/local/ncasign/download_artifact.php', [
+        'jobid' => $ncasignjobid,
+        'type' => 'signedpdf',
+    ]);
+} else if ($ispublicviewer) {
     $previewurl = new moodle_url('/local/sentaldocupload/publicfile.php', [
         'versionid' => $versionid,
         'userid' => $userid,
@@ -217,8 +282,8 @@ body.path-local-sentaldocupload .activity-navigation {
     inset: 0;
     z-index: 9999;
     width: 100%;
-    height: 100vh;
-    height: 100dvh;
+    height: var(--sv-height, 100vh);
+    min-height: var(--sv-height, 100vh);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -235,11 +300,17 @@ body.path-local-sentaldocupload .activity-navigation {
     align-items: center;
     gap: 8px;
     padding: 9px 10px;
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
     background: #fff;
     border-bottom: 1px solid #d6dde2;
     box-shadow: 0 2px 10px rgba(0,0,0,.18);
     z-index: 5;
+    scrollbar-width: none;
+}
+#sv-bar::-webkit-scrollbar {
+    display: none;
 }
 #sv-title {
     flex: 1 1 auto;
@@ -303,11 +374,19 @@ body.path-local-sentaldocupload .activity-navigation {
     padding: 18px 10px 28px;
     text-align: center;
 }
-#sv-pages { width: 100%; }
-.sv-page-wrap {
+#sv-pages {
     width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.sv-page-wrap {
+    width: fit-content;
+    max-width: 100%;
     margin: 0 auto 18px;
-    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
 .sv-page-label {
     display: inline-flex;
@@ -325,7 +404,7 @@ body.path-local-sentaldocupload .activity-navigation {
 .sv-page-canvas, #sv-image {
     display: block;
     margin: 0 auto;
-    max-width: 100%;
+    max-width: 100% !important;
     height: auto;
     background: #fff;
     border-radius: 3px;
@@ -378,11 +457,20 @@ body.path-local-sentaldocupload .activity-navigation {
     font-size: 13px;
 }
 @media (max-width: 520px) {
-    #sv-bar { gap: 5px; padding: 7px 6px; min-height: 48px; }
-    #sv-title { font-size: 12px; }
-    .sv-btn { min-height: 31px; padding: 6px 8px; font-size: 11px; border-radius: 7px; }
-    #sv-scroll { padding: 12px 6px 22px; }
+    #sv-bar {
+        gap: 5px;
+        padding: 7px max(6px, env(safe-area-inset-right, 0px)) 7px max(6px, env(safe-area-inset-left, 0px));
+        min-height: 48px;
+    }
+    #sv-title { display: none; }
+    .sv-btn { min-height: 32px; padding: 6px 7px; font-size: 11px; border-radius: 7px; }
+    #sv-scroll {
+        padding: 12px max(8px, env(safe-area-inset-right, 0px)) calc(22px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px));
+    }
     .sv-page-wrap { margin-bottom: 14px; }
+}
+@media (max-width: 360px) {
+    .sv-btn { padding-left: 6px; padding-right: 6px; font-size: 10px; }
 }
 </style>
 
@@ -455,6 +543,25 @@ body.path-local-sentaldocupload .activity-navigation {
     var PDFJS_SCRIPT = <?php echo json_encode($pdfjsscripturl, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
     var PDFJS_WORKER = <?php echo json_encode($pdfjsworkerurl, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
     var FALLBACK_TEXT = <?php echo json_encode($fallbacktext, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+
+    function updateViewportHeight() {
+        var height = window.innerHeight || document.documentElement.clientHeight || 0;
+        if (window.visualViewport && window.visualViewport.height) {
+            height = window.visualViewport.height;
+        }
+        if (height > 0) {
+            document.documentElement.style.setProperty('--sv-height', Math.floor(height) + 'px');
+        }
+    }
+
+    updateViewportHeight();
+    window.addEventListener('resize', updateViewportHeight);
+    window.addEventListener('orientationchange', function () {
+        window.setTimeout(updateViewportHeight, 250);
+    });
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', updateViewportHeight);
+    }
 
     function hideLoader() {
         if (loader) { loader.style.display = 'none'; }
@@ -551,7 +658,12 @@ body.path-local-sentaldocupload .activity-navigation {
         showCanvasViewer();
         if (errorBox) { errorBox.style.display = 'none'; }
 
-        var availableWidth = Math.max(280, Math.min((scrollEl ? scrollEl.clientWidth : window.innerWidth) - 20, 980));
+        var scrollStyle = scrollEl ? window.getComputedStyle(scrollEl) : null;
+        var paddingX = scrollStyle
+            ? (parseFloat(scrollStyle.paddingLeft) || 0) + (parseFloat(scrollStyle.paddingRight) || 0)
+            : 20;
+        var rawWidth = scrollEl && scrollEl.clientWidth ? scrollEl.clientWidth : window.innerWidth;
+        var availableWidth = Math.max(220, Math.min(rawWidth - paddingX - 2, 980));
 
         for (var pageNo = 1; pageNo <= total; pageNo++) {
             setLoading('Rendering ' + pageNo + ' / ' + total + '…');
