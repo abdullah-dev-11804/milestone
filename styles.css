@@ -2163,26 +2163,6 @@ a.sental-file-link i {
     }
 }
 
-
-/* v0.9.4 Course card generated image fallback.
-   Moodle auto-generated course card pictures are not stored as normal course files.
-   When no overview image URL exists, show a generated pattern instead of a blank block. */
-.sental-student-card-image {
-    background-color: hsl(var(--sental-course-hue, 42), 76%, 76%) !important;
-    background-image:
-        var(--sental-course-image, none),
-        radial-gradient(circle at 16% 28%, hsla(var(--sental-course-hue, 42), 55%, 48%, .28) 0 14px, transparent 15px),
-        radial-gradient(circle at 40% 16%, hsla(var(--sental-course-hue, 42), 55%, 48%, .22) 0 18px, transparent 19px),
-        radial-gradient(circle at 70% 36%, hsla(var(--sental-course-hue, 42), 55%, 48%, .24) 0 16px, transparent 17px),
-        radial-gradient(circle at 84% 72%, hsla(var(--sental-course-hue, 42), 55%, 48%, .22) 0 20px, transparent 21px),
-        linear-gradient(135deg,
-            hsl(var(--sental-course-hue, 42), 78%, 82%) 0%,
-            hsl(var(--sental-course-hue, 42), 70%, 72%) 52%,
-            hsl(var(--sental-course-hue, 42), 82%, 88%) 100%) !important;
-    background-size: cover, 76px 76px, 92px 92px, 86px 86px, 100px 100px, cover !important;
-    background-position: center, 0 0, 36px 10px, 8px 42px, 55px 24px, center !important;
-}
-
 /* v0.10.1 - Audit Trail + Version History responsive table fix.
    Requirement: keep the same desktop table view on mobile and only add horizontal scroll.
    No mobile card conversion, no extra helper text, and no CSS inside audit.php/history.php. */
@@ -2207,7 +2187,7 @@ body.path-local-sentaldocupload table.sental-audit-trail {
 
 /* Mobile: do NOT change the table into cards.
    Keep exact desktop-style columns and scroll horizontally inside the table wrapper. */
-@media (max-width: 780px) {
+@media (max-width: 768px) {
     body.path-local-sentaldocupload .sental-results-container,
     body.path-local-sentaldocupload .sental-ajax-results-inner {
         width: 100% !important;
@@ -2500,5 +2480,331 @@ body.path-local-sentaldocupload table.sental-audit-trail {
     body.path-local-sentaldocupload table.sental-audit-trail {
         width: 1030px !important;
         min-width: 1030px !important;
+    }
+}
+
+/* v0.11.3 - Clean My Certifications CSS.
+   Fixes:
+   - table headings stay on one line
+   - Version select box no longer cuts
+   - File column is smaller
+   - Status and Action stay aligned
+   - scrollbar appears only on 1450px or smaller screens */
+
+/* Course cards. */
+body.path-local-sentaldocupload .sental-student-course-grid {
+    align-items: stretch !important;
+}
+
+body.path-local-sentaldocupload .sental-student-course-card {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
+    align-items: stretch !important;
+    height: 360px !important;
+    min-height: 360px !important;
+    max-height: 360px !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+    cursor: pointer !important;
+}
+
+body.path-local-sentaldocupload .sental-student-course-card .sental-student-card-image {
+    flex: 0 0 150px !important;
+    width: 100% !important;
+    height: 150px !important;
+    min-height: 150px !important;
+    max-height: 150px !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    transform: none !important;
+    filter: none !important;
+    overflow: hidden !important;
+}
+
+body.path-local-sentaldocupload .sental-student-course-card .sental-student-card-image.is-moodle-generated-image,
+body.path-local-sentaldocupload .sental-student-course-card .sental-student-card-image.is-moodle-default-fallback {
+    background-image: var(--sental-course-image) !important;
+    background-size: cover !important;
+    background-position: center center !important;
+    background-repeat: no-repeat !important;
+    background-color: #6d58df !important;
+}
+
+body.path-local-sentaldocupload .sental-student-course-card .sental-student-card-image.has-uploaded-course-image {
+    background-image: var(--sental-course-image) !important;
+    background-size: contain !important;
+    background-position: center center !important;
+    background-repeat: no-repeat !important;
+    background-color: #ffffff !important;
+}
+
+body.path-local-sentaldocupload .sental-student-course-card .sental-student-card-image.is-moodle-default-fallback {
+    background-image:
+        linear-gradient(30deg, rgba(73, 53, 175, .34) 12%, transparent 12.5%, transparent 87%, rgba(73, 53, 175, .34) 87.5%, rgba(73, 53, 175, .34)),
+        linear-gradient(150deg, rgba(73, 53, 175, .34) 12%, transparent 12.5%, transparent 87%, rgba(73, 53, 175, .34) 87.5%, rgba(73, 53, 175, .34)),
+        linear-gradient(30deg, rgba(255, 255, 255, .07) 12%, transparent 12.5%, transparent 87%, rgba(255, 255, 255, .07) 87.5%, rgba(255, 255, 255, .07)),
+        linear-gradient(150deg, rgba(255, 255, 255, .07) 12%, transparent 12.5%, transparent 87%, rgba(255, 255, 255, .07) 87.5%, rgba(255, 255, 255, .07)),
+        linear-gradient(60deg, rgba(91, 69, 201, .55) 25%, transparent 25.5%, transparent 75%, rgba(91, 69, 201, .55) 75%, rgba(91, 69, 201, .55)),
+        linear-gradient(60deg, rgba(91, 69, 201, .55) 25%, transparent 25.5%, transparent 75%, rgba(91, 69, 201, .55) 75%, rgba(91, 69, 201, .55)) !important;
+    background-size: 48px 84px !important;
+    background-position: 0 0, 0 0, 24px 42px, 24px 42px, 0 0, 24px 42px !important;
+    background-repeat: repeat !important;
+}
+
+body.path-local-sentaldocupload .sental-student-course-card .sental-student-card-top {
+    flex: 0 0 auto !important;
+    margin: .75rem 1rem .2rem !important;
+    min-height: 28px !important;
+}
+
+body.path-local-sentaldocupload .sental-student-course-card .sental-student-course-title {
+    display: -webkit-box !important;
+    -webkit-line-clamp: 3 !important;
+    line-clamp: 3 !important;
+    -webkit-box-orient: vertical !important;
+    min-height: 72px !important;
+    max-height: 72px !important;
+    overflow: hidden !important;
+    padding: 0 1rem !important;
+    margin: .2rem 0 .45rem !important;
+    line-height: 1.35 !important;
+    font-size: 1.05rem !important;
+    font-weight: 800 !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+}
+
+body.path-local-sentaldocupload .sental-student-course-card .sental-student-card-meta {
+    flex: 0 0 auto !important;
+    padding: 0 1rem !important;
+    margin: 0 0 .35rem !important;
+    line-height: 1.35 !important;
+    white-space: normal !important;
+}
+
+/* My Certifications document table. */
+body.path-local-sentaldocupload .sental-student-detail {
+    display: block !important;
+}
+
+body.path-local-sentaldocupload .sental-student-table-wrap {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+    padding: 0 !important;
+    margin: .75rem 0 1rem !important;
+    border: 1px solid #e3edf4 !important;
+    border-radius: 12px !important;
+    background: #ffffff !important;
+}
+
+body.path-local-sentaldocupload .sental-student-versions-table {
+    display: table !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    margin: 0 !important;
+    background: #ffffff !important;
+}
+
+body.path-local-sentaldocupload .sental-student-versions-table thead {
+    display: table-header-group !important;
+    visibility: visible !important;
+    position: static !important;
+    height: auto !important;
+    width: auto !important;
+    clip: auto !important;
+    overflow: visible !important;
+}
+
+body.path-local-sentaldocupload .sental-student-versions-table tbody {
+    display: table-row-group !important;
+}
+
+body.path-local-sentaldocupload .sental-student-versions-table tr {
+    display: table-row !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+}
+
+body.path-local-sentaldocupload .sental-student-versions-table th,
+body.path-local-sentaldocupload .sental-student-versions-table td {
+    display: table-cell !important;
+    position: static !important;
+    box-sizing: border-box !important;
+    padding: 11px 10px !important;
+    border-bottom: 1px solid #e8eef4 !important;
+    vertical-align: middle !important;
+    text-align: left !important;
+    word-break: normal !important;
+    color: inherit !important;
+    background: transparent !important;
+}
+
+body.path-local-sentaldocupload .sental-student-versions-table th {
+    background: #f7fafc !important;
+    color: #1f2d3d !important;
+    font-weight: 800 !important;
+    line-height: 1.25 !important;
+    white-space: nowrap !important;
+    overflow: visible !important;
+    overflow-wrap: normal !important;
+    text-overflow: clip !important;
+}
+
+body.path-local-sentaldocupload .sental-student-versions-table td {
+    white-space: normal !important;
+    overflow: hidden !important;
+    text-overflow: clip !important;
+    overflow-wrap: anywhere !important;
+}
+
+body.path-local-sentaldocupload .sental-student-versions-table td::before,
+body.path-local-sentaldocupload .sental-student-versions-table td::after {
+    content: none !important;
+    display: none !important;
+}
+
+/* Column widths total 100%. File column reduced; Version/Action widened. */
+body.path-local-sentaldocupload .sental-student-versions-table th:nth-child(1),
+body.path-local-sentaldocupload .sental-student-versions-table td:nth-child(1) { width: 17% !important; }
+
+body.path-local-sentaldocupload .sental-student-versions-table th:nth-child(2),
+body.path-local-sentaldocupload .sental-student-versions-table td:nth-child(2) { width: 20% !important; }
+
+body.path-local-sentaldocupload .sental-student-versions-table th:nth-child(3),
+body.path-local-sentaldocupload .sental-student-versions-table td:nth-child(3) { width: 14.5% !important; }
+
+body.path-local-sentaldocupload .sental-student-versions-table th:nth-child(4),
+body.path-local-sentaldocupload .sental-student-versions-table td:nth-child(4) {
+    width: 10% !important;
+    overflow: visible !important;
+}
+
+body.path-local-sentaldocupload .sental-student-versions-table th:nth-child(5),
+body.path-local-sentaldocupload .sental-student-versions-table td:nth-child(5) { width: 11% !important; }
+
+body.path-local-sentaldocupload .sental-student-versions-table th:nth-child(6),
+body.path-local-sentaldocupload .sental-student-versions-table td:nth-child(6) { width: 11% !important; }
+
+body.path-local-sentaldocupload .sental-student-versions-table th:nth-child(7),
+body.path-local-sentaldocupload .sental-student-versions-table td:nth-child(7) {
+    width: 8% !important;
+    text-align: center !important;
+    overflow: visible !important;
+}
+
+body.path-local-sentaldocupload .sental-student-versions-table th:nth-child(8),
+body.path-local-sentaldocupload .sental-student-versions-table td:nth-child(8) {
+    width: 8.5% !important;
+    text-align: center !important;
+    overflow: visible !important;
+}
+
+body.path-local-sentaldocupload .sental-student-course-link,
+body.path-local-sentaldocupload .sental-student-file-link,
+body.path-local-sentaldocupload .sental-student-file-label {
+    display: inline-block !important;
+    max-width: 100% !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    vertical-align: middle !important;
+}
+
+body.path-local-sentaldocupload .sental-student-version-select,
+body.path-local-sentaldocupload .sental-student-versions-table select {
+    width: 100% !important;
+    min-width: 92px !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+body.path-local-sentaldocupload .sental-student-versions-table .sental-cert-status,
+body.path-local-sentaldocupload .sental-student-versions-table .badge {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-width: 68px !important;
+    max-width: 100% !important;
+    padding: 4px 9px !important;
+    line-height: 1.1 !important;
+    white-space: nowrap !important;
+    font-size: 12px !important;
+}
+
+body.path-local-sentaldocupload .sental-student-versions-table .sental-student-view-link {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-width: 54px !important;
+    max-width: 100% !important;
+    padding: 5px 10px !important;
+    line-height: 1.15 !important;
+    white-space: nowrap !important;
+}
+
+/* 1450px or less: add horizontal scrollbar and keep columns aligned. */
+@media (max-width: 1450px) {
+    body.path-local-sentaldocupload .sental-student-table-wrap {
+        overflow-x: auto !important;
+        overflow-y: visible !important;
+        -webkit-overflow-scrolling: touch !important;
+        padding-bottom: 10px !important;
+    }
+
+    body.path-local-sentaldocupload .sental-student-table-wrap::-webkit-scrollbar {
+        height: 8px !important;
+    }
+
+    body.path-local-sentaldocupload .sental-student-table-wrap::-webkit-scrollbar-track {
+        background: #edf2f6 !important;
+        border-radius: 999px !important;
+    }
+
+    body.path-local-sentaldocupload .sental-student-table-wrap::-webkit-scrollbar-thumb {
+        background: #7d8a99 !important;
+        border-radius: 999px !important;
+    }
+
+    body.path-local-sentaldocupload .sental-student-versions-table {
+        width: 1180px !important;
+        min-width: 1180px !important;
+        max-width: none !important;
+    }
+}
+
+@media (max-width: 767px) {
+    body.path-local-sentaldocupload .sental-student-course-card {
+        height: 345px !important;
+        min-height: 345px !important;
+        max-height: 345px !important;
+    }
+
+    body.path-local-sentaldocupload .sental-student-course-card .sental-student-card-image {
+        flex-basis: 138px !important;
+        height: 138px !important;
+        min-height: 138px !important;
+        max-height: 138px !important;
+    }
+
+    body.path-local-sentaldocupload .sental-student-course-card .sental-student-course-title {
+        min-height: 68px !important;
+        max-height: 68px !important;
+        font-size: 1rem !important;
+    }
+
+    body.path-local-sentaldocupload .sental-student-versions-table {
+        width: 1080px !important;
+        min-width: 1080px !important;
     }
 }
