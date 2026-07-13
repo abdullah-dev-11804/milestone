@@ -16,7 +16,7 @@ $PAGE->set_title(get_string('certifications', 'local_sentaldocupload'));
 $PAGE->set_heading(get_string('certifications', 'local_sentaldocupload'));
 $PAGE->requires->css(new moodle_url('/local/sentaldocupload/styles.css'));
 
-$courseimageurl = static function(int $courseid) use ($PAGE) : string {
+$courseimageinfo = static function(int $courseid) use ($PAGE) : array {
     global $OUTPUT;
 
     $normaliseurl = static function($image): string {
@@ -36,13 +36,13 @@ $courseimageurl = static function(int $courseid) use ($PAGE) : string {
         $course = null;
     }
 
-    // 1) First use the real uploaded course overview image, if the course has one.
+    // 1) Real uploaded Moodle course overview image.
     try {
         if ($course && class_exists('\\core_course\\external\\course_summary_exporter')) {
             $image = \core_course\external\course_summary_exporter::get_course_image($course);
             $image = $normaliseurl($image);
             if ($image !== '') {
-                return $image;
+                return ['url' => $image, 'type' => 'uploaded'];
             }
         }
     } catch (Throwable $e) {
@@ -71,15 +71,14 @@ $courseimageurl = static function(int $courseid) use ($PAGE) : string {
                     $file->get_filename(),
                     false
                 );
-                return $url->out(false);
+                return ['url' => $url->out(false), 'type' => 'uploaded'];
             }
         } catch (Throwable $e) {
             // Continue to Moodle generated image.
         }
     }
 
-    // 3) Use Moodle/theme generated course card image.
-    // This should match the default image Moodle shows on course cards when no overview image exists.
+    // 3) Moodle/theme generated default course card image.
     try {
         $renderers = [];
         if (!empty($OUTPUT)) {
@@ -94,7 +93,7 @@ $courseimageurl = static function(int $courseid) use ($PAGE) : string {
                 $generated = $renderer->get_generated_image_for_id($courseid);
                 $generated = $normaliseurl($generated);
                 if ($generated !== '') {
-                    return $generated;
+                    return ['url' => $generated, 'type' => 'generated'];
                 }
             }
         }
@@ -102,8 +101,8 @@ $courseimageurl = static function(int $courseid) use ($PAGE) : string {
         // Continue to plugin visual fallback.
     }
 
-    // 4) Last fallback is CSS only, styled to match Moodle's default course-card image.
-    return '';
+    // 4) CSS fallback only.
+    return ['url' => '', 'type' => 'fallback'];
 };
 
 // My Certifications is the student's private document area.
@@ -348,12 +347,9 @@ foreach ($courses as $course) {
                     'statushtml' => local_sentaldocupload_status_badge($status),
                     'uploadedat' => empty($row->timecreated) ? '-' : userdate((int)$row->timecreated, get_string('strftimedatetimeshort', 'langconfig')),
                     'uploadedby' => trim((string)$row->uploaderfirstname . ' ' . (string)$row->uploaderlastname),
-                    'downloadurl' => !empty($row->ncasignjobid)
-                        ? (new moodle_url('/local/ncasign/download_artifact.php', ['jobid' => (int)$row->ncasignjobid, 'type' => 'signedpdf']))->out(false)
-                        : (new moodle_url('/local/sentaldocupload/download.php', ['versionid' => (int)$row->versionid]))->out(false),
-                    'viewurl' => !empty($row->ncasignjobid)
-                        ? (new moodle_url('/local/ncasign/download_artifact.php', ['jobid' => (int)$row->ncasignjobid, 'type' => 'signedpdf']))->out(false)
-                        : (new moodle_url('/local/sentaldocupload/viewer.php', ['versionid' => (int)$row->versionid]))->out(false),
+                    'timecreatedraw' => (int)$row->timecreated,
+                    'downloadurl' => (new moodle_url('/local/sentaldocupload/download.php', ['versionid' => (int)$row->versionid]))->out(false),
+                    'viewurl' => (new moodle_url('/local/sentaldocupload/viewer.php', ['versionid' => (int)$row->versionid]))->out(false),
                 ];
             }
             if (!empty($versionspayload)) {
@@ -368,16 +364,32 @@ foreach ($courses as $course) {
         }
     }
 
+    $type1viewurl = '';
+    $type1timecreated = -1;
+    foreach (($typedata['type1'] ?? []) as $type1doc) {
+        foreach (($type1doc['versions'] ?? []) as $type1version) {
+            $candidatecreated = (int)($type1version['timecreatedraw'] ?? 0);
+            if ($type1viewurl === '' || $candidatecreated > $type1timecreated) {
+                $type1timecreated = $candidatecreated;
+                $type1viewurl = (string)($type1version['viewurl'] ?? '');
+            }
+        }
+    }
+
+    $courseimage = $courseimageinfo($courseid);
     $status = $statussourcebycourse[$courseid] ?? 'nodocument';
     $coursepayload[$courseid] = [
         'courseid' => $courseid,
         'fullname' => format_string($course->fullname),
         'shortname' => format_string($course->shortname),
+        'courseurl' => (new moodle_url('/course/view.php', ['id' => $courseid]))->out(false),
+        'type1viewurl' => $type1viewurl,
         'status' => $status,
         'statushtml' => local_sentaldocupload_status_badge($status),
         'latestexpiry' => array_key_exists($courseid, $latestexpirybycourse) ? $formatdate($latestexpirybycourse[$courseid]) : get_string('statusnodocument', 'local_sentaldocupload'),
         'documentcount' => count($doccountbycourse[$courseid] ?? []),
-        'courseimage' => $courseimageurl($courseid),
+        'courseimage' => (string)$courseimage['url'],
+        'courseimagetype' => (string)$courseimage['type'],
         'types' => $typedata,
     ];
 }
@@ -396,9 +408,7 @@ $langjson = json_encode([
 $PAGE->requires->js_init_code(<<<JS
 (function() {
     var courses = {$payloadjson};
-    var preferredCourseId = {$selectedcourseid};
     var lang = {$langjson};
-    var selectedCourseId = null;
 
     function qs(selector) { return document.querySelector(selector); }
     function qsa(selector) { return Array.prototype.slice.call(document.querySelectorAll(selector)); }
@@ -418,6 +428,51 @@ $PAGE->requires->js_init_code(<<<JS
             }
         }
         return versions[0] || null;
+    }
+
+    function sortedCourseIds() {
+        return Object.keys(courses || {}).sort(function(a, b) {
+            var ca = (courses[a] && courses[a].fullname ? courses[a].fullname : '').toLowerCase();
+            var cb = (courses[b] && courses[b].fullname ? courses[b].fullname : '').toLowerCase();
+            return ca.localeCompare(cb);
+        });
+    }
+
+    function buildFlatRows(type) {
+        var rows = [];
+        sortedCourseIds().forEach(function(courseid) {
+            var course = courses[courseid] || {};
+            var alltypes = course.types || {};
+            var types = type === 'all' ? ['type1', 'type2'] : [type];
+
+            types.forEach(function(t) {
+                (alltypes[t] || []).forEach(function(documentRow) {
+                    rows.push({
+                        documentid: documentRow.documentid,
+                        documenttype: t,
+                        label: documentRow.label || '',
+                        versions: documentRow.versions || [],
+                        courseid: course.courseid || courseid,
+                        coursefullname: course.fullname || '',
+                        courseshortname: course.shortname || '',
+                        courseurl: course.courseurl || '#'
+                    });
+                });
+            });
+        });
+
+        rows.sort(function(a, b) {
+            var courseCompare = String(a.coursefullname || '').localeCompare(String(b.coursefullname || ''));
+            if (courseCompare !== 0) { return courseCompare; }
+            var order = {type1: 1, type2: 2};
+            var typeCompare = (order[a.documenttype] || 99) - (order[b.documenttype] || 99);
+            if (typeCompare !== 0) { return typeCompare; }
+            var av = (a.versions && a.versions[0]) ? Number(a.versions[0].timecreatedraw || 0) : 0;
+            var bv = (b.versions && b.versions[0]) ? Number(b.versions[0].timecreatedraw || 0) : 0;
+            return bv - av;
+        });
+
+        return rows;
     }
 
     function updateTableRow(tr, documentRow, versionid) {
@@ -445,31 +500,26 @@ $PAGE->requires->js_init_code(<<<JS
         if (view) { view.href = selected.viewurl; }
     }
 
-    function renderRows(courseid, type) {
+    function renderRows(type) {
         var tbody = qs('#sental-student-versions tbody');
         var empty = qs('#sental-student-empty');
         var table = qs('#sental-student-versions');
+        var section = qs('#sental-student-detail');
         if (!tbody || !table || !empty) { return; }
+
         tbody.innerHTML = '';
-        var rows = [];
-        var alltypes = ((courses[courseid] || {}).types || {});
-        if (type === 'all') {
-            ['type1', 'type2'].forEach(function(t) {
-                (alltypes[t] || []).forEach(function(row) {
-                    row.__doctype = t;
-                    rows.push(row);
-                });
-            });
-        } else {
-            rows = (alltypes[type] || []).map(function(row) { row.__doctype = type; return row; });
-        }
+        var rows = buildFlatRows(type || 'all');
+
         if (!rows.length) {
             empty.style.display = 'block';
             table.style.display = 'none';
+            if (section) { section.style.display = 'block'; }
             return;
         }
+
         empty.style.display = 'none';
         table.style.display = 'table';
+        if (section) { section.style.display = 'block'; }
 
         rows.forEach(function(documentRow) {
             var selected = (documentRow.versions || [])[0];
@@ -477,6 +527,16 @@ $PAGE->requires->js_init_code(<<<JS
 
             var tr = document.createElement('tr');
             tr.setAttribute('data-documentid', documentRow.documentid);
+            tr.setAttribute('data-courseid', documentRow.courseid);
+
+            var coursetd = document.createElement('td');
+            var courselink = document.createElement('a');
+            courselink.href = documentRow.courseurl || '#';
+            courselink.className = 'sental-student-course-link';
+            courselink.textContent = documentRow.coursefullname || documentRow.courseshortname || '';
+            courselink.title = documentRow.coursefullname || documentRow.courseshortname || '';
+            coursetd.appendChild(courselink);
+            tr.appendChild(coursetd);
 
             var filetd = document.createElement('td');
             var link = document.createElement('a');
@@ -485,7 +545,7 @@ $PAGE->requires->js_init_code(<<<JS
             link.textContent = selected.filename;
             link.title = selected.filename;
             filetd.appendChild(link);
-            if (documentRow.label && (documentRow.showlabel || (documentRow.__doctype || type) === 'type2')) {
+            if (documentRow.label && documentRow.documenttype === 'type2') {
                 var label = document.createElement('div');
                 label.className = 'sental-student-file-label';
                 label.textContent = documentRow.label;
@@ -494,7 +554,7 @@ $PAGE->requires->js_init_code(<<<JS
             tr.appendChild(filetd);
 
             var typetd = document.createElement('td');
-            typetd.textContent = typeLabel(documentRow.__doctype || type);
+            typetd.textContent = typeLabel(documentRow.documenttype);
             tr.appendChild(typetd);
 
             var versiontd = document.createElement('td');
@@ -541,43 +601,29 @@ $PAGE->requires->js_init_code(<<<JS
         });
     }
 
-    function renderTypes(courseid) {
+    function setupDocumentTypeFilter() {
         var select = qs('#sental-student-doctype');
-        var section = qs('#sental-student-detail');
-        var course = courses[courseid];
-        selectedCourseId = courseid;
-        if (!select || !section || !course) { return; }
-        qsa('.sental-student-course-card').forEach(function(card) {
-            card.classList.toggle('is-active', card.getAttribute('data-courseid') === String(courseid));
-        });
-        qs('#sental-student-selected-course').textContent = course.fullname;
+        if (!select) { return; }
+
         select.innerHTML = '';
-        var types = Object.keys(course.types || {});
-        var order = {type1: 1, type2: 2};
-        types.sort(function(a, b) { return (order[a] || 99) - (order[b] || 99); });
-        if (!types.length) {
+
+        var allopt = document.createElement('option');
+        allopt.value = 'all';
+        allopt.textContent = typeLabel('all');
+        select.appendChild(allopt);
+
+        ['type1', 'type2'].forEach(function(type) {
             var opt = document.createElement('option');
-            opt.value = '';
-            opt.textContent = lang.nodocs || '';
+            opt.value = type;
+            opt.textContent = typeLabel(type);
             select.appendChild(opt);
-            select.disabled = true;
-            renderRows(courseid, '');
-        } else {
-            select.disabled = false;
-            var allopt = document.createElement('option');
-            allopt.value = 'all';
-            allopt.textContent = typeLabel('all');
-            select.appendChild(allopt);
-            types.forEach(function(type) {
-                var opt = document.createElement('option');
-                opt.value = type;
-                opt.textContent = typeLabel(type);
-                select.appendChild(opt);
-            });
-            select.value = 'all';
-            renderRows(courseid, select.value);
-        }
-        section.style.display = 'block';
+        });
+
+        select.value = 'all';
+        select.disabled = false;
+        select.addEventListener('change', function() {
+            renderRows(select.value || 'all');
+        });
     }
 
     document.addEventListener('click', function(e) {
@@ -585,30 +631,27 @@ $PAGE->requires->js_init_code(<<<JS
         if (card) {
             e.preventDefault();
             var courseid = card.getAttribute('data-courseid');
-            renderTypes(courseid);
+            var course = courses[courseid] || {};
+            var type1url = course.type1viewurl || '';
 
-            // Course card must not open the document viewer directly.
-            // It should open/select this course's certificate/document section on the same page.
+            qsa('.sental-student-course-card').forEach(function(item) {
+                item.classList.toggle('is-active', item.getAttribute('data-courseid') === String(courseid));
+            });
+
+            if (type1url) {
+                window.location.href = type1url;
+                return;
+            }
+
             var detail = qs('#sental-student-detail');
             if (detail && detail.scrollIntoView) {
                 detail.scrollIntoView({behavior: 'smooth', block: 'start'});
             }
         }
     });
-    document.addEventListener('change', function(e) {
-        if (e.target && e.target.id === 'sental-student-doctype' && selectedCourseId) {
-            renderRows(selectedCourseId, e.target.value);
-        }
-    });
 
-    if (preferredCourseId && courses[preferredCourseId]) {
-        renderTypes(preferredCourseId);
-    } else {
-        var first = qs('.sental-student-course-card');
-        if (first) {
-            renderTypes(first.getAttribute('data-courseid'));
-        }
-    }
+    setupDocumentTypeFilter();
+    renderRows('all');
 })();
 JS, true);
 
@@ -635,8 +678,15 @@ foreach ($courses as $course) {
         'data-courseid' => $courseid,
     ]);
     $imageurl = (string)($coursepayload[$courseid]['courseimage'] ?? '');
+    $imagetype = (string)($coursepayload[$courseid]['courseimagetype'] ?? 'fallback');
     $cssimageurl = str_replace(["\\", "\"", "\n", "\r"], ["\\\\", "\\\"", "", ""], $imageurl);
-    $imageclass = 'sental-student-card-image ' . ($imageurl !== '' ? 'has-moodle-course-image' : 'is-moodle-default-fallback');
+    if ($imageurl !== '' && $imagetype === 'generated') {
+        $imageclass = 'sental-student-card-image has-moodle-course-image is-moodle-generated-image';
+    } else if ($imageurl !== '') {
+        $imageclass = 'sental-student-card-image has-moodle-course-image has-uploaded-course-image';
+    } else {
+        $imageclass = 'sental-student-card-image is-moodle-default-fallback';
+    }
     $imagestyle = $imageurl !== ''
         ? '--sental-course-image:url("' . s($cssimageurl) . '");'
         : '--sental-course-image:none;';
@@ -652,8 +702,7 @@ foreach ($courses as $course) {
 }
 echo html_writer::end_div();
 
-echo html_writer::start_div('sental-student-detail', ['id' => 'sental-student-detail', 'style' => 'display:none']);
-echo html_writer::tag('div', '', ['id' => 'sental-student-selected-course', 'class' => 'sental-student-selected-course-name']);
+echo html_writer::start_div('sental-student-detail', ['id' => 'sental-student-detail']);
 echo html_writer::start_div('sental-student-type-select-wrap');
 echo html_writer::label(get_string('documenttype', 'local_sentaldocupload'), 'sental-student-doctype', false, ['class' => 'sental-student-select-label']);
 echo html_writer::select([], 'sental-student-doctype', '', false, ['id' => 'sental-student-doctype', 'class' => 'custom-select sental-student-type-select']);
@@ -663,7 +712,7 @@ echo html_writer::start_div('sental-student-table-wrap');
 echo html_writer::start_tag('table', ['class' => 'generaltable sental-student-versions-table', 'id' => 'sental-student-versions']);
 echo html_writer::start_tag('thead');
 echo html_writer::start_tag('tr');
-$headers = [get_string('file', 'local_sentaldocupload'), get_string('documenttype', 'local_sentaldocupload'), get_string('versionno', 'local_sentaldocupload'), get_string('issuedate', 'local_sentaldocupload'), get_string('expirydate', 'local_sentaldocupload'), get_string('certificationstatus', 'local_sentaldocupload'), get_string('action', 'local_sentaldocupload')];
+$headers = [get_string('course', 'local_sentaldocupload'), get_string('file', 'local_sentaldocupload'), get_string('documenttype', 'local_sentaldocupload'), get_string('versionno', 'local_sentaldocupload'), get_string('issuedate', 'local_sentaldocupload'), get_string('expirydate', 'local_sentaldocupload'), get_string('certificationstatus', 'local_sentaldocupload'), get_string('action', 'local_sentaldocupload')];
 foreach ($headers as $header) {
     echo html_writer::tag('th', $header);
 }
