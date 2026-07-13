@@ -224,72 +224,50 @@ foreach ([
     }
 }
 
-echo $OUTPUT->header();
+// The document viewer intentionally bypasses Moodle's header, footer and theme wrappers.
+// On iOS Safari those wrappers can change the visual viewport and canvas containing block,
+// causing otherwise correctly rendered PDF pages to appear offset or misaligned.
+\core\session\manager::write_close();
+@header('Content-Type: text/html; charset=utf-8');
 ?>
+<!doctype html>
+<html lang="<?php echo s(current_language()); ?>">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title><?php echo s($filename); ?></title>
 <style>
-* { box-sizing: border-box; }
-html, body, body.path-local-sentaldocupload {
-    position: fixed !important;
-    inset: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    overflow: hidden !important;
-    background: #1e2a3a !important;
+* {
+    box-sizing: border-box;
 }
-body.path-local-sentaldocupload #page,
-body.path-local-sentaldocupload #page-wrapper,
-body.path-local-sentaldocupload #page-content,
-body.path-local-sentaldocupload #region-main,
-body.path-local-sentaldocupload #region-main-box,
-body.path-local-sentaldocupload #region-main-wrap,
-body.path-local-sentaldocupload [role="main"],
-body.path-local-sentaldocupload .container,
-body.path-local-sentaldocupload .container-fluid {
-    width: 100% !important;
-    height: 100% !important;
-    min-height: 0 !important;
-    max-width: none !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    overflow: hidden !important;
-    background: transparent !important;
-}
-body.path-local-sentaldocupload #region-main > .card,
-body.path-local-sentaldocupload #region-main > .card > .card-body {
-    width: 100% !important;
-    height: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    border: 0 !important;
-    background: transparent !important;
-    box-shadow: none !important;
-}
-body.path-local-sentaldocupload header,
-body.path-local-sentaldocupload footer,
-body.path-local-sentaldocupload .navbar,
-body.path-local-sentaldocupload #page-header,
-body.path-local-sentaldocupload .breadcrumb,
-body.path-local-sentaldocupload .secondary-navigation,
-body.path-local-sentaldocupload .drawer-toggles,
-body.path-local-sentaldocupload .activity-header,
-body.path-local-sentaldocupload .activity-navigation {
-    display: none !important;
-}
-#sv-shell {
+html,
+body {
     position: fixed;
     inset: 0;
-    z-index: 9999;
     width: 100%;
-    height: var(--sv-height, 100vh);
-    min-height: var(--sv-height, 100vh);
-    display: flex;
-    flex-direction: column;
+    height: 100%;
+    margin: 0;
+    padding: 0;
     overflow: hidden;
     background: #1e2a3a;
     color: #1e2a3a;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    -webkit-text-size-adjust: 100%;
+}
+button,
+a {
+    font: inherit;
+}
+#sv-shell {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: #1e2a3a;
     padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
 }
@@ -299,18 +277,11 @@ body.path-local-sentaldocupload .activity-navigation {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 9px 10px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
+    padding: 9px max(10px, env(safe-area-inset-right, 0px)) 9px max(10px, env(safe-area-inset-left, 0px));
     background: #fff;
     border-bottom: 1px solid #d6dde2;
-    box-shadow: 0 2px 10px rgba(0,0,0,.18);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, .18);
     z-index: 5;
-    scrollbar-width: none;
-}
-#sv-bar::-webkit-scrollbar {
-    display: none;
 }
 #sv-title {
     flex: 1 1 auto;
@@ -330,17 +301,20 @@ body.path-local-sentaldocupload .activity-navigation {
     justify-content: center;
     border-radius: 8px;
     padding: 7px 11px;
+    border: 1px solid transparent;
     font-size: 12px;
     line-height: 1;
     font-weight: 800;
-    border: 1px solid transparent;
     text-decoration: none !important;
-    cursor: pointer;
     white-space: nowrap;
-    -webkit-tap-highlight-color: transparent;
+    cursor: pointer;
     appearance: none;
+    -webkit-appearance: none;
+    -webkit-tap-highlight-color: transparent;
 }
-.sv-btn-back, .sv-btn-share, .sv-btn-native {
+.sv-btn-back,
+.sv-btn-share,
+.sv-btn-native {
     background: #f2f5f7;
     border-color: #c9d3da;
     color: #1e2a3a !important;
@@ -376,17 +350,11 @@ body.path-local-sentaldocupload .activity-navigation {
 }
 #sv-pages {
     width: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
 }
 .sv-page-wrap {
-    width: fit-content;
-    max-width: 100%;
+    width: 100%;
     margin: 0 auto 18px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+    text-align: center;
 }
 .sv-page-label {
     display: inline-flex;
@@ -396,19 +364,20 @@ body.path-local-sentaldocupload .activity-navigation {
     margin: 0 auto 7px;
     padding: 4px 10px;
     border-radius: 999px;
-    background: rgba(255,255,255,.14);
+    background: rgba(255, 255, 255, .14);
     color: #fff;
     font-size: 12px;
     font-weight: 700;
 }
-.sv-page-canvas, #sv-image {
+.sv-page-canvas,
+#sv-image {
     display: block;
     margin: 0 auto;
-    max-width: 100% !important;
+    max-width: 100%;
     height: auto;
     background: #fff;
     border-radius: 3px;
-    box-shadow: 0 5px 18px rgba(0,0,0,.45);
+    box-shadow: 0 5px 18px rgba(0, 0, 0, .45);
 }
 #sv-loader {
     position: absolute;
@@ -429,12 +398,14 @@ body.path-local-sentaldocupload .activity-navigation {
 .sv-spinner {
     width: 42px;
     height: 42px;
-    border: 4px solid rgba(255,255,255,.25);
+    border: 4px solid rgba(255, 255, 255, .25);
     border-top-color: #fff;
     border-radius: 50%;
     animation: sv-spin .75s linear infinite;
 }
-@keyframes sv-spin { to { transform: rotate(360deg); } }
+@keyframes sv-spin {
+    to { transform: rotate(360deg); }
+}
 #sv-native {
     display: none;
     position: absolute;
@@ -459,21 +430,36 @@ body.path-local-sentaldocupload .activity-navigation {
 @media (max-width: 520px) {
     #sv-bar {
         gap: 5px;
-        padding: 7px max(6px, env(safe-area-inset-right, 0px)) 7px max(6px, env(safe-area-inset-left, 0px));
         min-height: 48px;
+        padding-top: 7px;
+        padding-bottom: 7px;
     }
-    #sv-title { display: none; }
-    .sv-btn { min-height: 32px; padding: 6px 7px; font-size: 11px; border-radius: 7px; }
+    #sv-title {
+        display: none;
+    }
+    .sv-btn {
+        min-height: 31px;
+        padding: 6px 7px;
+        border-radius: 7px;
+        font-size: 11px;
+    }
     #sv-scroll {
-        padding: 12px max(8px, env(safe-area-inset-right, 0px)) calc(22px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px));
+        padding: 12px max(6px, env(safe-area-inset-right, 0px)) calc(22px + env(safe-area-inset-bottom, 0px)) max(6px, env(safe-area-inset-left, 0px));
     }
-    .sv-page-wrap { margin-bottom: 14px; }
+    .sv-page-wrap {
+        margin-bottom: 14px;
+    }
 }
 @media (max-width: 360px) {
-    .sv-btn { padding-left: 6px; padding-right: 6px; font-size: 10px; }
+    .sv-btn {
+        padding-left: 5px;
+        padding-right: 5px;
+        font-size: 10px;
+    }
 }
 </style>
-
+</head>
+<body>
 <div id="sv-shell"
      data-share-url="<?php echo s($shareurl); ?>"
      data-pdf-url="<?php echo s($previewurl->out(false)); ?>"
@@ -481,7 +467,7 @@ body.path-local-sentaldocupload .activity-navigation {
      data-page-template="<?php echo s($pageindicator); ?>">
 
     <div id="sv-bar">
-        <a href="javascript:history.back()" class="sv-btn sv-btn-back"><?php echo s($backtext); ?></a>
+        <button type="button" id="sv-back" class="sv-btn sv-btn-back"><?php echo s($backtext); ?></button>
 
         <div id="sv-title" title="<?php echo s($filename); ?>"><?php echo s($filename); ?></div>
 
@@ -530,6 +516,7 @@ body.path-local-sentaldocupload .activity-navigation {
     'use strict';
 
     var shell = document.getElementById('sv-shell');
+    var backBtn = document.getElementById('sv-back');
     var copyBtn = document.getElementById('sv-copy-link');
     var loader = document.getElementById('sv-loader');
     var loaderText = document.getElementById('sv-loader-text');
@@ -544,50 +531,19 @@ body.path-local-sentaldocupload .activity-navigation {
     var PDFJS_WORKER = <?php echo json_encode($pdfjsworkerurl, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
     var FALLBACK_TEXT = <?php echo json_encode($fallbacktext, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
 
-    function updateViewportHeight() {
-        var height = window.innerHeight || document.documentElement.clientHeight || 0;
-        if (window.visualViewport && window.visualViewport.height) {
-            height = window.visualViewport.height;
-        }
-        if (height > 0) {
-            document.documentElement.style.setProperty('--sv-height', Math.floor(height) + 'px');
-        }
-    }
-
-    updateViewportHeight();
-    window.addEventListener('resize', updateViewportHeight);
-    window.addEventListener('orientationchange', function () {
-        window.setTimeout(updateViewportHeight, 250);
-    });
-    if (window.visualViewport) {
-        window.visualViewport.addEventListener('resize', updateViewportHeight);
-    }
-
     function hideLoader() {
-        if (loader) { loader.style.display = 'none'; }
+        if (loader) {
+            loader.style.display = 'none';
+        }
     }
 
     function setLoading(text) {
-        if (loader) { loader.style.display = 'flex'; }
-        if (loaderText && text) { loaderText.textContent = text; }
-    }
-
-    function showNativeViewer(reason) {
-        if (reason) { console.warn('[sental document viewer]', reason); }
-        hideLoader();
-        if (scrollEl) { scrollEl.style.display = 'none'; }
-        if (nativeFrame) {
-            nativeFrame.style.display = 'block';
-            if (nativeFrame.getAttribute('src') === 'about:blank') {
-                var pdfUrl = shell.getAttribute('data-pdf-url');
-                nativeFrame.src = pdfUrl + '#page=1&view=FitH&toolbar=1&navpanes=0';
-            }
+        if (loader) {
+            loader.style.display = 'flex';
         }
-    }
-
-    function showCanvasViewer() {
-        if (nativeFrame) { nativeFrame.style.display = 'none'; }
-        if (scrollEl) { scrollEl.style.display = 'block'; }
+        if (loaderText && text) {
+            loaderText.textContent = text;
+        }
     }
 
     function showError(message) {
@@ -597,31 +553,75 @@ body.path-local-sentaldocupload .activity-navigation {
         }
     }
 
+    function showCanvasViewer() {
+        if (nativeFrame) {
+            nativeFrame.style.display = 'none';
+        }
+        if (scrollEl) {
+            scrollEl.style.display = 'block';
+        }
+    }
+
+    function showNativeViewer(reason) {
+        if (reason) {
+            console.warn('[sental document viewer]', reason);
+        }
+        hideLoader();
+        if (scrollEl) {
+            scrollEl.style.display = 'none';
+        }
+        if (nativeFrame) {
+            nativeFrame.style.display = 'block';
+            if (nativeFrame.getAttribute('src') === 'about:blank') {
+                var pdfUrl = shell.getAttribute('data-pdf-url');
+                nativeFrame.src = pdfUrl + '#page=1&view=FitH&toolbar=1&navpanes=0';
+            }
+        }
+    }
+
     function loadScript(src) {
         return new Promise(function (resolve, reject) {
             var script = document.createElement('script');
-            var complete = false;
+            var completed = false;
             var timer = window.setTimeout(function () {
-                if (complete) { return; }
-                complete = true;
+                if (completed) {
+                    return;
+                }
+                completed = true;
                 reject(new Error('PDF.js loading timeout'));
             }, 10000);
 
             script.src = src;
             script.onload = function () {
-                if (complete) { return; }
-                complete = true;
+                if (completed) {
+                    return;
+                }
+                completed = true;
                 window.clearTimeout(timer);
                 resolve();
             };
             script.onerror = function () {
-                if (complete) { return; }
-                complete = true;
+                if (completed) {
+                    return;
+                }
+                completed = true;
                 window.clearTimeout(timer);
                 reject(new Error('PDF.js script failed'));
             };
             document.head.appendChild(script);
         });
+    }
+
+    function getAvailableWidth() {
+        if (!scrollEl) {
+            return Math.max(280, Math.min(window.innerWidth - 12, 980));
+        }
+
+        var style = window.getComputedStyle(scrollEl);
+        var leftPadding = parseFloat(style.paddingLeft) || 0;
+        var rightPadding = parseFloat(style.paddingRight) || 0;
+        var width = scrollEl.getBoundingClientRect().width - leftPadding - rightPadding;
+        return Math.max(220, Math.min(Math.floor(width), 980));
     }
 
     async function renderPdf() {
@@ -638,8 +638,6 @@ body.path-local-sentaldocupload .activity-navigation {
 
         window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
 
-        // Moodle file endpoints can behave inconsistently with partial range requests.
-        // Fetching the complete stream prevents missing or misaligned pages on iOS Safari.
         var pdf = await window.pdfjsLib.getDocument({
             url: pdfUrl,
             withCredentials: true,
@@ -656,24 +654,25 @@ body.path-local-sentaldocupload .activity-navigation {
 
         pages.innerHTML = '';
         showCanvasViewer();
-        if (errorBox) { errorBox.style.display = 'none'; }
+        if (errorBox) {
+            errorBox.style.display = 'none';
+        }
 
-        var scrollStyle = scrollEl ? window.getComputedStyle(scrollEl) : null;
-        var paddingX = scrollStyle
-            ? (parseFloat(scrollStyle.paddingLeft) || 0) + (parseFloat(scrollStyle.paddingRight) || 0)
-            : 20;
-        var rawWidth = scrollEl && scrollEl.clientWidth ? scrollEl.clientWidth : window.innerWidth;
-        var availableWidth = Math.max(220, Math.min(rawWidth - paddingX - 2, 980));
+        // The CSS page width is calculated once from the actual scroll viewport.
+        // Each canvas is rendered at that exact CSS size. Device pixel ratio only
+        // increases the backing bitmap; it never changes layout width on iOS.
+        var availableWidth = getAvailableWidth();
 
         for (var pageNo = 1; pageNo <= total; pageNo++) {
             setLoading('Rendering ' + pageNo + ' / ' + total + '…');
 
             var page = await pdf.getPage(pageNo);
             var baseViewport = page.getViewport({ scale: 1 });
-            var scale = availableWidth / baseViewport.width;
-            scale = Math.max(0.45, Math.min(scale, 1.75));
-            var viewport = page.getViewport({ scale: scale });
+            var cssScale = availableWidth / baseViewport.width;
+            cssScale = Math.max(0.35, Math.min(cssScale, 1.75));
+            var cssViewport = page.getViewport({ scale: cssScale });
             var dpr = Math.min(window.devicePixelRatio || 1, 2);
+            var renderViewport = page.getViewport({ scale: cssScale * dpr });
 
             var wrap = document.createElement('section');
             wrap.className = 'sv-page-wrap';
@@ -686,10 +685,10 @@ body.path-local-sentaldocupload .activity-navigation {
             var canvas = document.createElement('canvas');
             canvas.className = 'sv-page-canvas';
 
-            var cssWidth = Math.floor(viewport.width);
-            var cssHeight = Math.floor(viewport.height);
-            canvas.width = Math.floor(cssWidth * dpr);
-            canvas.height = Math.floor(cssHeight * dpr);
+            var cssWidth = Math.floor(cssViewport.width);
+            var cssHeight = Math.floor(cssViewport.height);
+            canvas.width = Math.max(1, Math.floor(renderViewport.width));
+            canvas.height = Math.max(1, Math.floor(renderViewport.height));
             canvas.style.width = cssWidth + 'px';
             canvas.style.height = cssHeight + 'px';
 
@@ -697,11 +696,23 @@ body.path-local-sentaldocupload .activity-navigation {
             pages.appendChild(wrap);
 
             var context = canvas.getContext('2d', { alpha: false });
-            context.setTransform(dpr, 0, 0, dpr, 0, 0);
-            await page.render({ canvasContext: context, viewport: viewport }).promise;
+            await page.render({
+                canvasContext: context,
+                viewport: renderViewport
+            }).promise;
         }
 
         hideLoader();
+    }
+
+    if (backBtn) {
+        backBtn.addEventListener('click', function () {
+            if (window.history.length > 1) {
+                window.history.back();
+            } else {
+                window.close();
+            }
+        });
     }
 
     if (copyBtn && shell) {
@@ -728,7 +739,11 @@ body.path-local-sentaldocupload .activity-navigation {
                 document.body.appendChild(textarea);
                 textarea.focus();
                 textarea.select();
-                try { document.execCommand('copy'); } catch (e) {}
+                try {
+                    document.execCommand('copy');
+                } catch (e) {
+                    // Ignore and leave the user on the viewer.
+                }
                 document.body.removeChild(textarea);
             }
 
@@ -776,5 +791,7 @@ body.path-local-sentaldocupload .activity-navigation {
     }
 })();
 </script>
+</body>
+</html>
 <?php
-echo $OUTPUT->footer();
+exit;
