@@ -48,6 +48,7 @@ $string['doctype_type1'] = 'Type 1 - Course completion document';
 $string['doctype_type2'] = 'Type 2 - Supplementary document';
 $string['type1defaultlabel'] = 'Course completion document';
 $string['type1mustbepdf'] = 'Type 1 course completion document must be uploaded as a single PDF file.';
+$string['activeedsdocumentblocksupload'] = 'A course completion document cannot be uploaded for {$a->learner} in "{$a->course}" because an active EDS certificate already exists for this learner and course. Only one active course completion document is allowed. Current EDS expiry: {$a->expiry}.';
 $string['customlabel'] = 'Document name / label';
 $string['customlabelplaceholder'] = 'Example: Test sheet, inspection record, attendance sheet';
 $string['customlabelhelp'] = 'Required for Type 2 supplementary documents. This label helps admins identify the uploaded file.';

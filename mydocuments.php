@@ -348,8 +348,12 @@ foreach ($courses as $course) {
                     'uploadedat' => empty($row->timecreated) ? '-' : userdate((int)$row->timecreated, get_string('strftimedatetimeshort', 'langconfig')),
                     'uploadedby' => trim((string)$row->uploaderfirstname . ' ' . (string)$row->uploaderlastname),
                     'timecreatedraw' => (int)$row->timecreated,
-                    'downloadurl' => (new moodle_url('/local/sentaldocupload/download.php', ['versionid' => (int)$row->versionid]))->out(false),
-                    'viewurl' => (new moodle_url('/local/sentaldocupload/viewer.php', ['versionid' => (int)$row->versionid]))->out(false),
+                    'downloadurl' => !empty($row->ncasignjobid)
+                        ? (new moodle_url('/local/ncasign/download_artifact.php', ['jobid' => (int)$row->ncasignjobid, 'type' => 'signedpdf']))->out(false)
+                        : (new moodle_url('/local/sentaldocupload/download.php', ['versionid' => (int)$row->versionid]))->out(false),
+                    'viewurl' => !empty($row->ncasignjobid)
+                        ? (new moodle_url('/local/sentaldocupload/viewer.php', ['ncasignjobid' => (int)$row->ncasignjobid]))->out(false)
+                        : (new moodle_url('/local/sentaldocupload/viewer.php', ['versionid' => (int)$row->versionid]))->out(false),
                 ];
             }
             if (!empty($versionspayload)) {
@@ -451,6 +455,7 @@ $PAGE->requires->js_init_code(<<<JS
                         documentid: documentRow.documentid,
                         documenttype: t,
                         label: documentRow.label || '',
+                        showlabel: !!documentRow.showlabel,
                         versions: documentRow.versions || [],
                         courseid: course.courseid || courseid,
                         coursefullname: course.fullname || '',
@@ -545,7 +550,7 @@ $PAGE->requires->js_init_code(<<<JS
             link.textContent = selected.filename;
             link.title = selected.filename;
             filetd.appendChild(link);
-            if (documentRow.label && documentRow.documenttype === 'type2') {
+            if (documentRow.label && (documentRow.showlabel || documentRow.documenttype === 'type2')) {
                 var label = document.createElement('div');
                 label.className = 'sental-student-file-label';
                 label.textContent = documentRow.label;

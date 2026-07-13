@@ -134,6 +134,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        if ($documenttype === 'type1') {
+            $linkeduserids = array_values(array_unique(array_merge([$userid], $participantids)));
+            foreach ($linkeduserids as $linkeduserid) {
+                $linkeduserid = (int)$linkeduserid;
+                $activeeds = local_sentaldocupload_get_active_eds_course_completion_document($courseid, $linkeduserid);
+                if (!$activeeds) {
+                    continue;
+                }
+
+                $learner = $DB->get_record('user', ['id' => $linkeduserid], 'id,firstname,lastname,email,username', IGNORE_MISSING);
+                $course = get_course($courseid);
+                $expirytext = empty($activeeds->expirydate)
+                    ? get_string('noexpiry', 'local_sentaldocupload')
+                    : userdate((int)$activeeds->expirydate, get_string('strftimedate', 'langconfig'));
+                redirect($PAGE->url, get_string('activeedsdocumentblocksupload', 'local_sentaldocupload', (object)[
+                    'learner' => $learner ? fullname($learner) : (string)$linkeduserid,
+                    'course' => format_string($course->fullname),
+                    'expiry' => $expirytext,
+                ]), null, \core\output\notification::NOTIFY_ERROR);
+            }
+        }
+
         foreach ($draftfiles as $storedfile) {
             if ($storedfile->is_directory()) {
                 continue;

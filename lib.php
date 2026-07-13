@@ -124,6 +124,84 @@ function local_sentaldocupload_user_course_has_eds_document(int $courseid, int $
 }
 
 /**
+ * Return an active EDS course-completion document for a learner/course, if one exists.
+ *
+ * Active means a completed NCASign course-completion job has a signed PDF and
+ * its calculated course-validity expiry has not passed. Courses with no
+ * validity period configured are treated as no-expiry/active.
+ *
+ * @param int $courseid
+ * @param int $userid
+ * @return \stdClass|null
+ */
+function local_sentaldocupload_get_active_eds_course_completion_document(int $courseid, int $userid): ?\stdClass {
+    global $DB;
+
+    if ($courseid <= 0 || $userid <= 0 || !$DB->get_manager()->table_exists('local_ncasign_jobs')) {
+        return null;
+    }
+
+    $sql = "SELECT j.id,
+                   j.userid,
+                   j.courseid,
+                   j.documenttitle,
+                   j.status,
+                   j.timecreated,
+                   j.manualcompleted,
+                   j.autosigned,
+                   f.id AS fileid,
+                   f.timemodified AS filetimemodified,
+                   cc.timecompleted AS completiontime
+              FROM {local_ncasign_jobs} j
+              JOIN {files} f ON f.component = :component
+                             AND f.filearea = :filearea
+                             AND f.itemid = j.id
+                             AND f.filename <> :dot
+         LEFT JOIN {course_completions} cc ON cc.course = j.courseid
+                                          AND cc.userid = j.userid
+             WHERE j.userid = :userid
+               AND j.courseid = :courseid
+               AND j.origin = :origin
+               AND j.status IN (:completedmanual, :completedauto)
+          ORDER BY j.timecreated DESC, f.id DESC";
+
+    $records = $DB->get_records_sql($sql, [
+        'component' => 'local_ncasign',
+        'filearea' => 'signedpdf',
+        'dot' => '.',
+        'userid' => $userid,
+        'courseid' => $courseid,
+        'origin' => 'course_completion',
+        'completedmanual' => 'completed_manual',
+        'completedauto' => 'completed_auto',
+    ]);
+    if (!$records) {
+        return null;
+    }
+
+    $validitydays = local_sentaldocupload_get_course_validity_days($courseid);
+    $now = time();
+    foreach ($records as $record) {
+        $issuedate = 0;
+        foreach (['completiontime', 'manualcompleted', 'autosigned', 'filetimemodified', 'timecreated'] as $field) {
+            if (!empty($record->$field)) {
+                $issuedate = (int)$record->$field;
+                break;
+            }
+        }
+        $expirydate = local_sentaldocupload_calculate_expiry($issuedate, $validitydays);
+        if ($expirydate === null || $expirydate >= $now) {
+            $record->issuedate = $issuedate;
+            $record->expirydate = $expirydate;
+            $record->validitydays = $validitydays;
+            return $record;
+        }
+    }
+
+    return null;
+}
+
+/**
  * Decide whether a manual scan should be visible in Public Profile.
  *
  * Type 2 supplementary documents are never public. Type 1 scans are public
