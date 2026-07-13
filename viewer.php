@@ -6,8 +6,7 @@ require_once(__DIR__ . '/../../config.php');
 require_once($CFG->libdir . '/filelib.php');
 require_once(__DIR__ . '/lib.php');
 
-$versionid = optional_param('versionid', 0, PARAM_INT);
-$ncasignjobid = optional_param('ncasignjobid', 0, PARAM_INT);
+$versionid = required_param('versionid', PARAM_INT);
 $public = optional_param('public', 0, PARAM_BOOL);
 $userid = optional_param('userid', 0, PARAM_INT);
 $courseid = optional_param('courseid', 0, PARAM_INT);
@@ -15,13 +14,11 @@ $courseid = optional_param('courseid', 0, PARAM_INT);
 $context = context_system::instance();
 
 $record = null;
-$file = null;
 $canmanage = false;
 $ispublicviewer = false;
-$isncasignviewer = false;
 
 if ($public) {
-    if (empty($versionid) || empty($userid) || empty($courseid)) {
+    if (empty($userid) || empty($courseid)) {
         throw new moodle_exception('filenotfound');
     }
 
@@ -42,100 +39,48 @@ if ($public) {
     require_login();
     $canmanage = has_capability('local/sentaldocupload:manage', $context);
 
-    if ($ncasignjobid > 0) {
-        $job = $DB->get_record('local_ncasign_jobs', ['id' => $ncasignjobid], '*', IGNORE_MISSING);
-        if (!$job) {
-            throw new moodle_exception('filenotfound');
-        }
+    $sql = "SELECT v.id AS id,
+                   v.id AS versionid,
+                   v.documentid,
+                   v.versionno,
+                   v.filename,
+                   v.issuedate,
+                   v.expirydate,
+                   d.courseid,
+                   d.documenttype,
+                   c.fullname AS coursefullname,
+                   c.shortname AS courseshortname,
+                   du.userid
+              FROM {sental_modeb_doc_version} v
+              JOIN {sental_modeb_doc} d ON d.id = v.documentid
+              JOIN {course} c ON c.id = d.courseid
+              JOIN {sental_modeb_doc_user} du ON du.documentid = d.id
+             WHERE v.id = :versionid";
+    $records = $DB->get_records_sql($sql, ['versionid' => $versionid]);
+    if (!$records) {
+        throw new moodle_exception('filenotfound');
+    }
 
-        $coursecontext = context_course::instance((int)$job->courseid, IGNORE_MISSING);
-        $ownsdocument = ((int)$job->userid === (int)$USER->id);
-        $isenrolledincourse = ($coursecontext && is_enrolled($coursecontext, $USER, '', true));
-        if (!$canmanage && !$ownsdocument && !$isenrolledincourse) {
-            throw new required_capability_exception($context, 'local/sentaldocupload:manage', 'nopermissions', 'error');
+    $ownsdocument = false;
+    foreach ($records as $candidate) {
+        if ((int)$candidate->userid === (int)$USER->id) {
+            $record = $candidate;
+            $ownsdocument = true;
+            break;
         }
+    }
+    if (!$record) {
+        $record = reset($records);
+    }
 
-        $course = $DB->get_record('course', ['id' => (int)$job->courseid], 'id,fullname,shortname', MUST_EXIST);
-        $fs = get_file_storage();
-        $files = $fs->get_area_files($context->id, 'local_ncasign', 'signedpdf', $ncasignjobid, 'id DESC', false);
-        $file = reset($files);
-        if (!$file) {
-            throw new moodle_exception('filenotfound');
-        }
-
-        $completiontime = (int)$DB->get_field('course_completions', 'timecompleted', [
-            'course' => (int)$job->courseid,
-            'userid' => (int)$job->userid,
-        ], IGNORE_MISSING);
-        $issuedate = (int)($completiontime ?: $job->manualcompleted ?: $job->autosigned ?: $job->timecreated);
-        $validitydays = local_sentaldocupload_get_course_validity_days((int)$job->courseid);
-        $expirydate = local_sentaldocupload_calculate_expiry($issuedate, $validitydays);
-
-        $record = (object)[
-            'id' => -$ncasignjobid,
-            'versionid' => -$ncasignjobid,
-            'documentid' => -$ncasignjobid,
-            'versionno' => 1,
-            'filename' => $file->get_filename(),
-            'issuedate' => $issuedate,
-            'expirydate' => $expirydate,
-            'courseid' => (int)$job->courseid,
-            'documenttype' => 'type1',
-            'coursefullname' => $course->fullname,
-            'courseshortname' => $course->shortname,
-            'userid' => (int)$job->userid,
-        ];
-        $isncasignviewer = true;
-    } else {
-        if (empty($versionid)) {
-            throw new moodle_exception('filenotfound');
-        }
-
-        $sql = "SELECT v.id AS id,
-                       v.id AS versionid,
-                       v.documentid,
-                       v.versionno,
-                       v.filename,
-                       v.issuedate,
-                       v.expirydate,
-                       d.courseid,
-                       d.documenttype,
-                       c.fullname AS coursefullname,
-                       c.shortname AS courseshortname,
-                       du.userid
-                  FROM {sental_modeb_doc_version} v
-                  JOIN {sental_modeb_doc} d ON d.id = v.documentid
-                  JOIN {course} c ON c.id = d.courseid
-                  JOIN {sental_modeb_doc_user} du ON du.documentid = d.id
-                 WHERE v.id = :versionid";
-        $records = $DB->get_records_sql($sql, ['versionid' => $versionid]);
-        if (!$records) {
-            throw new moodle_exception('filenotfound');
-        }
-
-        $ownsdocument = false;
-        foreach ($records as $candidate) {
-            if ((int)$candidate->userid === (int)$USER->id) {
-                $record = $candidate;
-                $ownsdocument = true;
-                break;
-            }
-        }
-        if (!$record) {
-            $record = reset($records);
-        }
-
-        if (!$canmanage && !$ownsdocument) {
-            throw new required_capability_exception($context, 'local/sentaldocupload:manage', 'nopermissions', 'error');
-        }
+    if (!$canmanage && !$ownsdocument) {
+        throw new required_capability_exception($context, 'local/sentaldocupload:manage', 'nopermissions', 'error');
     }
 }
 
 $fs = get_file_storage();
-if (!$file) {
-    $files = $fs->get_area_files($context->id, 'local_sentaldocupload', 'document', $versionid, 'filename', false);
-    $file = reset($files);
-}
+$files = $fs->get_area_files($context->id, 'local_sentaldocupload', 'document', $versionid, 'filename', false);
+$file = reset($files);
 if (!$file) {
     throw new moodle_exception('filenotfound');
 }
@@ -149,9 +94,6 @@ $formatdate = static function($timestamp) {
 };
 
 $params = ['versionid' => $versionid];
-if ($isncasignviewer) {
-    $params = ['ncasignjobid' => $ncasignjobid];
-}
 if ($ispublicviewer) {
     $params['public'] = 1;
     $params['userid'] = $userid;
@@ -165,17 +107,7 @@ $PAGE->set_heading(get_string('documentviewer', 'local_sentaldocupload'));
 $PAGE->set_pagelayout('embedded');
 $PAGE->requires->css(new moodle_url('/local/sentaldocupload/styles.css'));
 
-if ($isncasignviewer) {
-    $previewurl = new moodle_url('/local/ncasign/download_artifact.php', [
-        'jobid' => $ncasignjobid,
-        'type' => 'signedpdf',
-        'inline' => 1,
-    ]);
-    $downloadurl = new moodle_url('/local/ncasign/download_artifact.php', [
-        'jobid' => $ncasignjobid,
-        'type' => 'signedpdf',
-    ]);
-} else if ($ispublicviewer) {
+if ($ispublicviewer) {
     $previewurl = new moodle_url('/local/sentaldocupload/publicfile.php', [
         'versionid' => $versionid,
         'userid' => $userid,
