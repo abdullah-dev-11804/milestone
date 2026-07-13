@@ -1073,7 +1073,7 @@ a.sental-file-link i {
 
 /* Student certifications page */
 .sental-student-docs-page {
-    max-width: 1220px;
+    max-width: 100%;
     margin: 0 auto;
 }
 .sental-page-title {
@@ -1743,7 +1743,7 @@ a.sental-file-link i {
 }
 
 .sental-student-docs-page {
-    max-width: 1240px;
+    max-width: 100%;
 }
 .sental-page-subtitle {
     margin: .2rem 0 1.25rem;
