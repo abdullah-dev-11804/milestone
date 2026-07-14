@@ -101,29 +101,23 @@ if ($public) {
                        d.courseid,
                        d.documenttype,
                        c.fullname AS coursefullname,
-                       c.shortname AS courseshortname,
-                       du.userid
+                       c.shortname AS courseshortname
                   FROM {sental_modeb_doc_version} v
                   JOIN {sental_modeb_doc} d ON d.id = v.documentid
                   JOIN {course} c ON c.id = d.courseid
-                  JOIN {sental_modeb_doc_user} du ON du.documentid = d.id
                  WHERE v.id = :versionid";
-        $records = $DB->get_records_sql($sql, ['versionid' => $versionid]);
-        if (!$records) {
+        $record = $DB->get_record_sql($sql, ['versionid' => $versionid], IGNORE_MISSING);
+        if (!$record) {
             throw new moodle_exception('filenotfound');
         }
 
-        $ownsdocument = false;
-        foreach ($records as $candidate) {
-            if ((int)$candidate->userid === (int)$USER->id) {
-                $record = $candidate;
-                $ownsdocument = true;
-                break;
-            }
-        }
-        if (!$record) {
-            $record = reset($records);
-        }
+        $ownsdocument = $DB->record_exists('sental_modeb_doc_user', [
+            'documentid' => (int)$record->documentid,
+            'userid' => (int)$USER->id,
+        ]);
+        $record->userid = $ownsdocument
+            ? (int)$USER->id
+            : (int)$DB->get_field('sental_modeb_doc_user', 'userid', ['documentid' => (int)$record->documentid], IGNORE_MULTIPLE);
 
         if (!$canmanage && !$ownsdocument) {
             throw new required_capability_exception($context, 'local/sentaldocupload:manage', 'nopermissions', 'error');
