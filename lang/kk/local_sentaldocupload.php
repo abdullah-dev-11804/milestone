@@ -151,6 +151,7 @@ $string['sentaldocupload:manage'] = 'SENTAL құжат жүктеулерін б
 $string['sentaldocupload:viewdocuments'] = 'SENTAL құжаттарын көру';
 $string['all_documents'] = 'Барлық құжаттар';
 $string['documentviewer'] = 'Құжатты қарау';
+$string['courseunavailable'] = 'Курс қолжетімсіз (ID {$a})';
 $string['viewdocument'] = 'Құжатты қарау';
 $string['copysharelink'] = 'Сілтемені көшіру';
 $string['copied'] = 'Көшірілді';

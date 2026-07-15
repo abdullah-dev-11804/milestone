@@ -55,7 +55,12 @@ if ($public) {
             throw new required_capability_exception($context, 'local/sentaldocupload:manage', 'nopermissions', 'error');
         }
 
-        $course = $DB->get_record('course', ['id' => (int)$job->courseid], 'id,fullname,shortname', MUST_EXIST);
+        $course = $DB->get_record('course', ['id' => (int)$job->courseid], 'id,fullname,shortname', IGNORE_MISSING);
+        $coursefullname = $course
+            ? (string)$course->fullname
+            : get_string('courseunavailable', 'local_sentaldocupload', (int)$job->courseid);
+        $courseshortname = $course ? (string)$course->shortname : '';
+
         $fs = get_file_storage();
         $files = $fs->get_area_files($context->id, 'local_ncasign', 'signedpdf', $ncasignjobid, 'id DESC', false);
         $file = reset($files);
@@ -81,8 +86,8 @@ if ($public) {
             'expirydate' => $expirydate,
             'courseid' => (int)$job->courseid,
             'documenttype' => 'type1',
-            'coursefullname' => $course->fullname,
-            'courseshortname' => $course->shortname,
+            'coursefullname' => $coursefullname,
+            'courseshortname' => $courseshortname,
             'userid' => (int)$job->userid,
         ];
         $isncasignviewer = true;

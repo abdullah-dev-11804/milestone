@@ -170,6 +170,7 @@ $string['sentaldocupload:manage'] = 'Manage SENTAL document uploads';
 $string['sentaldocupload:viewdocuments'] = 'View SENTAL documents';
 $string['all_documents'] = 'All documents';
 $string['documentviewer'] = 'Document viewer';
+$string['courseunavailable'] = 'Course unavailable (ID {$a})';
 $string['viewdocument'] = 'View Document';
 $string['copysharelink'] = 'Copy share link';
 $string['copied'] = 'Copied';
