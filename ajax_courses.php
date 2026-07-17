@@ -8,6 +8,7 @@ require_once(__DIR__ . '/lib.php');
 require_login();
 require_sesskey();
 $context = context_system::instance();
+$PAGE->set_context($context);
 $requestedcourseid = optional_param('courseid', 0, PARAM_INT);
 $canmanageglobal = has_capability('local/sentaldocupload:manage', $context);
 

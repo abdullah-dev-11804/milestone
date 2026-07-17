@@ -7,7 +7,7 @@ require_once(__DIR__ . '/lib.php');
 require_login();
 require_sesskey();
 $context = context_system::instance();
-
+$PAGE->set_context($context);
 $courseids = optional_param_array('courseids', [], PARAM_INT);
 $result = ['success' => true, 'courses' => []];
 foreach (array_unique(array_map('intval', $courseids)) as $courseid) {

@@ -7,7 +7,7 @@ require_once(__DIR__ . '/lib.php');
 require_login();
 require_sesskey();
 $context = context_system::instance();
-
+$PAGE->set_context($context);
 $courseid = required_param('courseid', PARAM_INT);
 $issuedatestr = required_param('issuedate', PARAM_RAW_TRIMMED);
 local_sentaldocupload_require_upload_for_course($courseid);

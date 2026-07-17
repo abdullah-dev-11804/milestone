@@ -9,6 +9,7 @@ require_login();
 require_sesskey();
 
 $context = context_system::instance();
+$PAGE->set_context($context);
 $canmanageglobal = has_capability('local/sentaldocupload:manage', $context);
 $requestedcourseid = optional_param('requestedcourseid', 0, PARAM_INT);
 
