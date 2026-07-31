@@ -1281,8 +1281,6 @@ function local_sentaldocupload_render_profile_documents_table(int $userid): stri
  * @param stdClass|null $course
  */
 function local_sentaldocupload_myprofile_navigation(core_user\output\myprofile\tree $tree, $user, $iscurrentuser, $course): void {
-    global $PAGE;
-
     if (empty($user->id) || isguestuser($user)) {
         return;
     }
@@ -1298,8 +1296,6 @@ function local_sentaldocupload_myprofile_navigation(core_user\output\myprofile\t
     if (!class_exists('\core_user\output\myprofile\node')) {
         return;
     }
-
-    $PAGE->requires->css(new moodle_url('/local/sentaldocupload/styles.css'));
 
     if (class_exists('\core_user\output\myprofile\category') && method_exists($tree, 'add_category')) {
         $tree->add_category(new \core_user\output\myprofile\category(
@@ -1493,7 +1489,17 @@ function local_sentaldocupload_before_http_headers(): void {
  * @return string
  */
 function local_sentaldocupload_before_standard_html_head(): string {
-    global $COURSE;
+    global $COURSE, $PAGE;
+
+    $path = $PAGE->url ? $PAGE->url->get_path() : '';
+    if ($path === '/user/profile.php' || $path === '/user/view.php') {
+        return html_writer::empty_tag('link', [
+            'rel' => 'stylesheet',
+            'type' => 'text/css',
+            'href' => (new moodle_url('/local/sentaldocupload/styles.css'))->out(false),
+        ]);
+    }
+
     if (!local_sentaldocupload_is_course_homepage()) {
         return '';
     }
