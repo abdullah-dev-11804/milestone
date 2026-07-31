@@ -1100,8 +1100,7 @@ function local_sentaldocupload_get_profile_document_rows(int $userid): array {
                 WHERE du.userid = :userid
                   AND d.documenttype IN ('type1', 'type2')
                   AND c.id <> :siteid
-                  AND v.versionno = d.currentversion
-             ORDER BY c.fullname ASC, d.documenttype ASC, d.id ASC";
+             ORDER BY c.fullname ASC, d.documenttype ASC, d.id ASC, v.versionno DESC, v.timecreated DESC";
     foreach ($DB->get_records_sql($docsql, ['userid' => $userid, 'siteid' => SITEID]) as $row) {
         $row->ncasignjobid = 0;
         $row->profileviewurl = (new moodle_url('/local/sentaldocupload/viewer.php', [
@@ -1227,6 +1226,41 @@ function local_sentaldocupload_render_profile_documents_table(int $userid): stri
             : userdate((int)$timestamp, get_string('strftimedate', 'langconfig'));
     };
 
+    $documents = [];
+    foreach ($rows as $row) {
+        $documentid = (int)$row->documentid;
+        if (!isset($documents[$documentid])) {
+            $documents[$documentid] = [
+                'documentid' => $documentid,
+                'courseid' => (int)$row->courseid,
+                'coursefullname' => (string)$row->coursefullname,
+                'courseshortname' => (string)$row->courseshortname,
+                'documenttype' => (string)$row->documenttype,
+                'customlabel' => (string)($row->customlabel ?? ''),
+                'versions' => [],
+                'timecreated' => (int)($row->timecreated ?? 0),
+            ];
+        }
+        $documents[$documentid]['versions'][] = $row;
+        $documents[$documentid]['timecreated'] = max(
+            (int)$documents[$documentid]['timecreated'],
+            (int)($row->timecreated ?? 0)
+        );
+    }
+
+    uasort($documents, static function(array $a, array $b): int {
+        $coursecompare = strcasecmp((string)$a['coursefullname'], (string)$b['coursefullname']);
+        if ($coursecompare !== 0) {
+            return $coursecompare;
+        }
+        $typeorder = ['type1' => 1, 'type2' => 2];
+        $typecompare = ($typeorder[(string)$a['documenttype']] ?? 99) - ($typeorder[(string)$b['documenttype']] ?? 99);
+        if ($typecompare !== 0) {
+            return $typecompare;
+        }
+        return (int)$b['timecreated'] <=> (int)$a['timecreated'];
+    });
+
     $table = new html_table();
     $table->attributes['class'] = 'generaltable sental-student-versions-table sental-profile-documents-table';
     $table->head = [
@@ -1240,36 +1274,120 @@ function local_sentaldocupload_render_profile_documents_table(int $userid): stri
         get_string('action', 'local_sentaldocupload'),
     ];
 
-    foreach ($rows as $row) {
-        $coursecontext = context_course::instance((int)$row->courseid, IGNORE_MISSING);
+    foreach ($documents as $document) {
+        if (empty($document['versions'])) {
+            continue;
+        }
+
+        $row = $document['versions'][0];
+        $coursecontext = context_course::instance((int)$document['courseid'], IGNORE_MISSING);
         $coursename = $coursecontext
-            ? format_string((string)$row->coursefullname, true, ['context' => $coursecontext])
-            : format_string((string)$row->coursefullname);
+            ? format_string((string)$document['coursefullname'], true, ['context' => $coursecontext])
+            : format_string((string)$document['coursefullname']);
         $filename = (string)($row->filename ?: get_string('file', 'local_sentaldocupload'));
-        $label = trim((string)($row->versionlabel ?: $row->customlabel ?: ''));
-        $filehtml = html_writer::link($row->profileviewurl, s($filename), ['class' => 'sental-student-file-link']);
-        if ($label !== '' && ((string)$row->documenttype === 'type2' || !empty($row->ncasignjobid))) {
+        $label = trim((string)($row->versionlabel ?: $document['customlabel'] ?: ''));
+        $filehtml = html_writer::link($row->profileviewurl, s($filename), [
+            'class' => 'sental-student-file-link sental-profile-version-file-link',
+            'title' => $filename,
+        ]);
+        if ($label !== '' && ((string)$document['documenttype'] === 'type2' || !empty($row->ncasignjobid))) {
             $filehtml .= html_writer::div(s($label), 'sental-student-file-label');
         }
 
         $status = local_sentaldocupload_get_status(empty($row->expirydate) ? null : (int)$row->expirydate, true);
+
+        $selectattrs = [
+            'class' => 'custom-select custom-select-sm sental-student-version-select sental-profile-version-select',
+            'aria-label' => get_string('versionno', 'local_sentaldocupload'),
+        ];
+        if (count($document['versions']) <= 1) {
+            $selectattrs['disabled'] = 'disabled';
+        }
+
+        $versionselect = html_writer::start_tag('select', $selectattrs);
+        foreach ($document['versions'] as $version) {
+            $versionstatus = local_sentaldocupload_get_status(
+                empty($version->expirydate) ? null : (int)$version->expirydate,
+                true
+            );
+            $versionfilename = (string)($version->filename ?: get_string('file', 'local_sentaldocupload'));
+            $optionattrs = [
+                'value' => (int)$version->versionid,
+                'data-filename' => $versionfilename,
+                'data-viewurl' => (string)$version->profileviewurl,
+                'data-issuedate' => $formatdate($version->issuedate),
+                'data-expirydate' => $formatdate($version->expirydate),
+                'data-statushtml' => local_sentaldocupload_status_badge($versionstatus),
+            ];
+            if ((int)$version->versionid === (int)$row->versionid) {
+                $optionattrs['selected'] = 'selected';
+            }
+            $versionselect .= html_writer::tag('option', 'v' . (int)$version->versionno, $optionattrs);
+        }
+        $versionselect .= html_writer::end_tag('select');
+
         $table->data[] = [
-            html_writer::link(new moodle_url('/course/view.php', ['id' => (int)$row->courseid]), $coursename, ['class' => 'sental-student-course-link']),
+            html_writer::link(new moodle_url('/course/view.php', ['id' => (int)$document['courseid']]), $coursename, [
+                'class' => 'sental-student-course-link',
+                'title' => $coursename,
+            ]),
             $filehtml,
-            (string)$row->documenttype === 'type1'
+            (string)$document['documenttype'] === 'type1'
                 ? get_string('doctype_type1_short', 'local_sentaldocupload')
                 : get_string('doctype_type2_short', 'local_sentaldocupload'),
-            'v' . (int)$row->versionno,
-            $formatdate($row->issuedate),
-            $formatdate($row->expirydate),
-            local_sentaldocupload_status_badge($status),
+            $versionselect,
+            html_writer::span($formatdate($row->issuedate), 'sental-profile-version-issuedate'),
+            html_writer::span($formatdate($row->expirydate), 'sental-profile-version-expirydate'),
+            html_writer::span(local_sentaldocupload_status_badge($status), 'sental-profile-version-status'),
             html_writer::link($row->profileviewurl, get_string('viewfile', 'local_sentaldocupload'), [
-                'class' => 'btn btn-sm btn-outline-success sental-student-view-link',
+                'class' => 'btn btn-sm btn-outline-success sental-student-view-link sental-profile-version-view-link',
             ]),
         ];
     }
 
-    return html_writer::div(html_writer::table($table), 'sental-student-table-wrap sental-profile-documents-wrap');
+    $script = html_writer::script("
+        (function() {
+            function updateProfileDocumentRow(select) {
+                var option = select.options[select.selectedIndex];
+                var row = select.closest('tr');
+                if (!option || !row) {
+                    return;
+                }
+
+                var file = row.querySelector('.sental-profile-version-file-link');
+                var issue = row.querySelector('.sental-profile-version-issuedate');
+                var expiry = row.querySelector('.sental-profile-version-expirydate');
+                var status = row.querySelector('.sental-profile-version-status');
+                var view = row.querySelector('.sental-profile-version-view-link');
+
+                if (file) {
+                    file.href = option.getAttribute('data-viewurl') || '#';
+                    file.textContent = option.getAttribute('data-filename') || '';
+                    file.title = option.getAttribute('data-filename') || '';
+                }
+                if (issue) {
+                    issue.textContent = option.getAttribute('data-issuedate') || '';
+                }
+                if (expiry) {
+                    expiry.textContent = option.getAttribute('data-expirydate') || '';
+                }
+                if (status) {
+                    status.innerHTML = option.getAttribute('data-statushtml') || '';
+                }
+                if (view) {
+                    view.href = option.getAttribute('data-viewurl') || '#';
+                }
+            }
+
+            document.addEventListener('change', function(e) {
+                if (e.target && e.target.classList && e.target.classList.contains('sental-profile-version-select')) {
+                    updateProfileDocumentRow(e.target);
+                }
+            });
+        })();
+    ");
+
+    return html_writer::div(html_writer::table($table), 'sental-student-table-wrap sental-profile-documents-wrap') . $script;
 }
 
 /**
