@@ -41,6 +41,7 @@ if ($public) {
 } else {
     require_login();
     $canmanage = has_capability('local/sentaldocupload:manage', $context);
+    $canviewdocuments = $canmanage || has_capability('local/sentaldocupload:viewdocuments', $context);
 
     if ($ncasignjobid > 0) {
         $job = $DB->get_record('local_ncasign_jobs', ['id' => $ncasignjobid], '*', IGNORE_MISSING);
@@ -51,7 +52,7 @@ if ($public) {
         $coursecontext = context_course::instance((int)$job->courseid, IGNORE_MISSING);
         $ownsdocument = ((int)$job->userid === (int)$USER->id);
         $isenrolledincourse = ($coursecontext && is_enrolled($coursecontext, $USER, '', true));
-        if (!$canmanage && !$ownsdocument && !$isenrolledincourse) {
+        if (!$canviewdocuments && !$ownsdocument && !$isenrolledincourse) {
             throw new required_capability_exception($context, 'local/sentaldocupload:manage', 'nopermissions', 'error');
         }
 
@@ -124,7 +125,7 @@ if ($public) {
             ? (int)$USER->id
             : (int)$DB->get_field('sental_modeb_doc_user', 'userid', ['documentid' => (int)$record->documentid], IGNORE_MULTIPLE);
 
-        if (!$canmanage && !$ownsdocument) {
+        if (!$canviewdocuments && !$ownsdocument) {
             throw new required_capability_exception($context, 'local/sentaldocupload:manage', 'nopermissions', 'error');
         }
     }

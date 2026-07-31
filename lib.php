@@ -1061,6 +1061,218 @@ function local_sentaldocupload_render_public_profile_certifications(int $userid)
 }
 
 /**
+ * Return latest document rows for the profile documents block.
+ *
+ * This mirrors the My Certifications table at a compact level and includes
+ * both uploaded documents and completed EDS/NCA signed documents.
+ *
+ * @param int $userid
+ * @return array<int, stdClass>
+ */
+function local_sentaldocupload_get_profile_document_rows(int $userid): array {
+    global $DB;
+
+    if ($userid <= 0) {
+        return [];
+    }
+
+    $rows = [];
+
+    $docsql = "SELECT v.id AS id,
+                      d.id AS documentid,
+                      d.courseid,
+                      c.fullname AS coursefullname,
+                      c.shortname AS courseshortname,
+                      d.documenttype,
+                      d.customlabel,
+                      d.currentversion,
+                      v.id AS versionid,
+                      v.versionno,
+                      v.filename,
+                      v.customlabel AS versionlabel,
+                      v.issuedate,
+                      v.expirydate,
+                      v.timecreated
+                 FROM {sental_modeb_doc_user} du
+                 JOIN {sental_modeb_doc} d ON d.id = du.documentid
+                 JOIN {sental_modeb_doc_version} v ON v.documentid = d.id
+                 JOIN {course} c ON c.id = d.courseid
+                WHERE du.userid = :userid
+                  AND d.documenttype IN ('type1', 'type2')
+                  AND c.id <> :siteid
+                  AND v.versionno = d.currentversion
+             ORDER BY c.fullname ASC, d.documenttype ASC, d.id ASC";
+    foreach ($DB->get_records_sql($docsql, ['userid' => $userid, 'siteid' => SITEID]) as $row) {
+        $row->ncasignjobid = 0;
+        $row->profileviewurl = (new moodle_url('/local/sentaldocupload/viewer.php', [
+            'versionid' => (int)$row->versionid,
+        ]))->out(false);
+        $rows[] = $row;
+    }
+
+    if ($DB->get_manager()->table_exists('local_ncasign_jobs')) {
+        $ncasignsql = "SELECT f.id AS id,
+                              j.id AS jobid,
+                              j.courseid,
+                              c.fullname AS coursefullname,
+                              c.shortname AS courseshortname,
+                              j.documenttitle,
+                              j.timecreated AS jobtimecreated,
+                              j.manualcompleted,
+                              j.autosigned,
+                              f.filename AS signedfilename,
+                              f.timecreated AS filetimecreated,
+                              f.timemodified AS filetimemodified,
+                              cc.timecompleted AS completiontime
+                         FROM {local_ncasign_jobs} j
+                         JOIN {course} c ON c.id = j.courseid
+                         JOIN {files} f ON f.component = :component
+                                        AND f.filearea = :filearea
+                                        AND f.itemid = j.id
+                                        AND f.filename <> :dot
+                    LEFT JOIN {course_completions} cc ON cc.course = j.courseid
+                                                     AND cc.userid = j.userid
+                        WHERE j.userid = :ncauserid
+                          AND c.id <> :ncasiteid
+                          AND j.status IN (:completedmanual, :completedauto)
+                          AND j.origin <> :demoorigin
+                     ORDER BY c.fullname ASC, j.timecreated DESC, f.id DESC";
+        $seenjobs = [];
+        foreach ($DB->get_records_sql($ncasignsql, [
+            'component' => 'local_ncasign',
+            'filearea' => 'signedpdf',
+            'dot' => '.',
+            'ncauserid' => $userid,
+            'ncasiteid' => SITEID,
+            'completedmanual' => 'completed_manual',
+            'completedauto' => 'completed_auto',
+            'demoorigin' => 'demo_job',
+        ]) as $row) {
+            $jobid = (int)$row->jobid;
+            if (isset($seenjobs[$jobid])) {
+                continue;
+            }
+            $seenjobs[$jobid] = true;
+
+            $documenttitle = trim((string)($row->documenttitle ?? ''));
+            $filename = trim((string)($row->signedfilename ?? ''));
+            $displayfilename = $documenttitle !== '' ? $documenttitle : $filename;
+            if ($displayfilename === '') {
+                $displayfilename = get_string('file', 'local_sentaldocupload');
+            }
+            if (strtolower(pathinfo($displayfilename, PATHINFO_EXTENSION)) !== 'pdf') {
+                $displayfilename .= '.pdf';
+            }
+
+            $issuedate = (int)($row->completiontime ?: $row->manualcompleted ?: $row->autosigned ?: $row->jobtimecreated ?: $row->filetimemodified);
+            $validitydays = local_sentaldocupload_get_course_validity_days((int)$row->courseid);
+
+            $rows[] = (object)[
+                'documentid' => -$jobid,
+                'courseid' => (int)$row->courseid,
+                'coursefullname' => (string)$row->coursefullname,
+                'courseshortname' => (string)$row->courseshortname,
+                'documenttype' => 'type1',
+                'customlabel' => $documenttitle,
+                'versionid' => -$jobid,
+                'versionno' => 1,
+                'filename' => $displayfilename,
+                'versionlabel' => $documenttitle,
+                'issuedate' => $issuedate,
+                'expirydate' => local_sentaldocupload_calculate_expiry($issuedate, $validitydays),
+                'timecreated' => (int)($row->filetimemodified ?: $row->filetimecreated ?: $row->jobtimecreated),
+                'ncasignjobid' => $jobid,
+                'profileviewurl' => (new moodle_url('/local/sentaldocupload/viewer.php', [
+                    'ncasignjobid' => $jobid,
+                ]))->out(false),
+            ];
+        }
+    }
+
+    usort($rows, static function($a, $b): int {
+        $coursecompare = strcasecmp((string)$a->coursefullname, (string)$b->coursefullname);
+        if ($coursecompare !== 0) {
+            return $coursecompare;
+        }
+        $typeorder = ['type1' => 1, 'type2' => 2];
+        $typecompare = ($typeorder[(string)$a->documenttype] ?? 99) - ($typeorder[(string)$b->documenttype] ?? 99);
+        if ($typecompare !== 0) {
+            return $typecompare;
+        }
+        return (int)$b->timecreated <=> (int)$a->timecreated;
+    });
+
+    return $rows;
+}
+
+/**
+ * Render a compact My Certifications table for Moodle user profile pages.
+ *
+ * @param int $userid
+ * @return string
+ */
+function local_sentaldocupload_render_profile_documents_table(int $userid): string {
+    $rows = local_sentaldocupload_get_profile_document_rows($userid);
+
+    if (empty($rows)) {
+        return html_writer::div(
+            get_string('nodocumentsfortype', 'local_sentaldocupload'),
+            'alert alert-info sental-profile-documents-empty'
+        );
+    }
+
+    $formatdate = static function($timestamp): string {
+        return empty($timestamp)
+            ? get_string('noexpiry', 'local_sentaldocupload')
+            : userdate((int)$timestamp, get_string('strftimedate', 'langconfig'));
+    };
+
+    $table = new html_table();
+    $table->attributes['class'] = 'generaltable sental-student-versions-table sental-profile-documents-table';
+    $table->head = [
+        get_string('course', 'local_sentaldocupload'),
+        get_string('file', 'local_sentaldocupload'),
+        get_string('documenttype', 'local_sentaldocupload'),
+        get_string('versionno', 'local_sentaldocupload'),
+        get_string('issuedate', 'local_sentaldocupload'),
+        get_string('expirydate', 'local_sentaldocupload'),
+        get_string('certificationstatus', 'local_sentaldocupload'),
+        get_string('action', 'local_sentaldocupload'),
+    ];
+
+    foreach ($rows as $row) {
+        $coursecontext = context_course::instance((int)$row->courseid, IGNORE_MISSING);
+        $coursename = $coursecontext
+            ? format_string((string)$row->coursefullname, true, ['context' => $coursecontext])
+            : format_string((string)$row->coursefullname);
+        $filename = (string)($row->filename ?: get_string('file', 'local_sentaldocupload'));
+        $label = trim((string)($row->versionlabel ?: $row->customlabel ?: ''));
+        $filehtml = html_writer::link($row->profileviewurl, s($filename), ['class' => 'sental-student-file-link']);
+        if ($label !== '' && ((string)$row->documenttype === 'type2' || !empty($row->ncasignjobid))) {
+            $filehtml .= html_writer::div(s($label), 'sental-student-file-label');
+        }
+
+        $status = local_sentaldocupload_get_status(empty($row->expirydate) ? null : (int)$row->expirydate, true);
+        $table->data[] = [
+            html_writer::link(new moodle_url('/course/view.php', ['id' => (int)$row->courseid]), $coursename, ['class' => 'sental-student-course-link']),
+            $filehtml,
+            (string)$row->documenttype === 'type1'
+                ? get_string('doctype_type1_short', 'local_sentaldocupload')
+                : get_string('doctype_type2_short', 'local_sentaldocupload'),
+            'v' . (int)$row->versionno,
+            $formatdate($row->issuedate),
+            $formatdate($row->expirydate),
+            local_sentaldocupload_status_badge($status),
+            html_writer::link($row->profileviewurl, get_string('viewfile', 'local_sentaldocupload'), [
+                'class' => 'btn btn-sm btn-outline-success sental-student-view-link',
+            ]),
+        ];
+    }
+
+    return html_writer::div(html_writer::table($table), 'sental-student-table-wrap sental-profile-documents-wrap');
+}
+
+/**
  * Add public certifications to the Moodle user profile page.
  *
  * @param core_user\output\myprofile\tree $tree
@@ -1069,10 +1281,44 @@ function local_sentaldocupload_render_public_profile_certifications(int $userid)
  * @param stdClass|null $course
  */
 function local_sentaldocupload_myprofile_navigation(core_user\output\myprofile\tree $tree, $user, $iscurrentuser, $course): void {
-    // Disabled by requirement: do not show SENTAL certifications on Moodle public profile.
-    // Course completion Type 1 documents are still stored in the plugin tables and Moodle File API.
-    // Their display location will be handled separately later.
-    return;
+    global $PAGE;
+
+    if (empty($user->id) || isguestuser($user)) {
+        return;
+    }
+
+    $context = context_system::instance();
+    $canviewdocuments = has_capability('local/sentaldocupload:viewdocuments', $context)
+        || has_capability('local/sentaldocupload:manage', $context);
+
+    if (!$iscurrentuser && !$canviewdocuments) {
+        return;
+    }
+
+    if (!class_exists('\core_user\output\myprofile\node')) {
+        return;
+    }
+
+    $PAGE->requires->css(new moodle_url('/local/sentaldocupload/styles.css'));
+
+    if (class_exists('\core_user\output\myprofile\category') && method_exists($tree, 'add_category')) {
+        $tree->add_category(new \core_user\output\myprofile\category(
+            'sentaldocuments',
+            get_string('certifications', 'local_sentaldocupload')
+        ));
+        $parent = 'sentaldocuments';
+    } else {
+        $parent = 'miscellaneous';
+    }
+
+    $tree->add_node(new \core_user\output\myprofile\node(
+        $parent,
+        'sentallinkeddocuments',
+        get_string('certifications', 'local_sentaldocupload'),
+        null,
+        null,
+        local_sentaldocupload_render_profile_documents_table((int)$user->id)
+    ));
 }
 
 /**

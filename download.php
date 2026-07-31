@@ -28,12 +28,13 @@ $sql = "SELECT v.*, v.id AS versionid,
 $first = $DB->get_record_sql($sql, ['versionid' => $versionid], MUST_EXIST);
 
 $canmanage = has_capability('local/sentaldocupload:manage', $context);
+$canviewdocuments = $canmanage || has_capability('local/sentaldocupload:viewdocuments', $context);
 $ownsdocument = $DB->record_exists('sental_modeb_doc_user', [
     'documentid' => (int)$first->documentid,
     'userid' => (int)$USER->id,
 ]);
 
-if (!$canmanage && !$ownsdocument) {
+if (!$canviewdocuments && !$ownsdocument) {
     throw new required_capability_exception($context, 'local/sentaldocupload:manage', 'nopermissions', 'error');
 }
 
@@ -44,7 +45,7 @@ $audituserid = $ownsdocument
 // My Certifications is a private student area. Students may download any Type 1 or Type 2
 // document version linked to their own user record. Public Profile visibility is checked only
 // by publicfile.php / the Moodle user profile integration, not here.
-if (!$canmanage) {
+if (!$canviewdocuments) {
     if (!in_array((string)$first->documenttype, ['type1', 'type2'], true)) {
         throw new required_capability_exception($context, 'local/sentaldocupload:manage', 'nopermissions', 'error');
     }
