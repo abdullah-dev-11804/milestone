@@ -1310,7 +1310,7 @@ function local_sentaldocupload_myprofile_navigation(core_user\output\myprofile\t
     $tree->add_node(new \core_user\output\myprofile\node(
         $parent,
         'sentallinkeddocuments',
-        get_string('certifications', 'local_sentaldocupload'),
+        '',
         null,
         null,
         local_sentaldocupload_render_profile_documents_table((int)$user->id)
