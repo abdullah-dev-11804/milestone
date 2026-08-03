@@ -12,6 +12,61 @@ $userid = optional_param('userid', 0, PARAM_INT);
 
 require_login();
 
+/**
+ * Check whether the current user has any of the provided role shortnames.
+ *
+ * @param array $shortnames
+ * @return bool
+ */
+function local_sentaldocupload_course_record_has_role_shortname(array $shortnames): bool {
+    global $DB, $USER;
+
+    if (empty($USER->id) || empty($shortnames)) {
+        return false;
+    }
+
+    [$rolesql, $roleparams] = $DB->get_in_or_equal($shortnames, SQL_PARAMS_NAMED, 'role');
+    $params = ['userid' => (int)$USER->id] + $roleparams;
+
+    return $DB->record_exists_sql(
+        "SELECT 1
+           FROM {role_assignments} ra
+           JOIN {role} r ON r.id = ra.roleid
+          WHERE ra.userid = :userid
+            AND r.shortname $rolesql",
+        $params
+    );
+}
+
+/**
+ * Check whether the current user's company role can view this learner.
+ *
+ * @param int $learnerid
+ * @param array $shortnames
+ * @return bool
+ */
+function local_sentaldocupload_course_record_role_can_view_learner(int $learnerid, array $shortnames): bool {
+    global $USER;
+
+    if (!local_sentaldocupload_course_record_has_role_shortname($shortnames)) {
+        return false;
+    }
+
+    if (is_siteadmin() || !function_exists('local_sentaldocupload_iomad_tables_exist')
+            || !local_sentaldocupload_iomad_tables_exist()) {
+        return true;
+    }
+
+    $viewercompanies = local_sentaldocupload_get_user_company_ids((int)$USER->id);
+    $learnercompanies = local_sentaldocupload_get_user_company_ids($learnerid);
+
+    if (empty($viewercompanies) || empty($learnercompanies)) {
+        return true;
+    }
+
+    return !empty(array_intersect($viewercompanies, $learnercompanies));
+}
+
 $context = context_system::instance();
 $course = $DB->get_record('course', ['id' => $courseid], '*', MUST_EXIST);
 $coursecontext = context_course::instance($courseid, IGNORE_MISSING);
@@ -22,8 +77,14 @@ if ($userid <= 0) {
 
 $learner = $DB->get_record('user', ['id' => $userid, 'deleted' => 0], '*', MUST_EXIST);
 $isownrecord = (int)$USER->id === $userid;
+$roleviewer = local_sentaldocupload_course_record_role_can_view_learner($userid, [
+    'companyowner',
+    'companymanager',
+    'trainingmanager',
+]);
 $canviewdocuments = has_capability('local/sentaldocupload:viewdocuments', $context)
-    || has_capability('local/sentaldocupload:manage', $context);
+    || has_capability('local/sentaldocupload:manage', $context)
+    || $roleviewer;
 $isenrolled = $coursecontext && is_enrolled($coursecontext, $learner, '', true);
 
 if (!$isownrecord && !$canviewdocuments) {
