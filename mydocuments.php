@@ -387,6 +387,7 @@ foreach ($courses as $course) {
         'fullname' => format_string($course->fullname),
         'shortname' => format_string($course->shortname),
         'courseurl' => (new moodle_url('/course/view.php', ['id' => $courseid]))->out(false),
+        'recordurl' => (new moodle_url('/local/sentaldocupload/course_record.php', ['courseid' => $courseid]))->out(false),
         'type1viewurl' => $type1viewurl,
         'status' => $status,
         'statushtml' => local_sentaldocupload_status_badge($status),
@@ -637,14 +638,15 @@ $PAGE->requires->js_init_code(<<<JS
             e.preventDefault();
             var courseid = card.getAttribute('data-courseid');
             var course = courses[courseid] || {};
+            var recordurl = course.recordurl || '';
             var type1url = course.type1viewurl || '';
 
             qsa('.sental-student-course-card').forEach(function(item) {
                 item.classList.toggle('is-active', item.getAttribute('data-courseid') === String(courseid));
             });
 
-            if (type1url) {
-                window.location.href = type1url;
+            if (recordurl || type1url) {
+                window.location.href = recordurl || type1url;
                 return;
             }
 
