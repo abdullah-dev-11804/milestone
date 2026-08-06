@@ -202,6 +202,61 @@ function local_sentaldocupload_get_active_eds_course_completion_document(int $co
 }
 
 /**
+ * Return an EDS/NCA course-completion record that blocks Type 1 scan upload.
+ *
+ * A pending NCASign job must block upload too, because it already represents
+ * the course-completion document in progress. A completed signed EDS/NCA
+ * document only blocks while it is still active/not expired.
+ *
+ * @param int $courseid
+ * @param int $userid
+ * @return \stdClass|null
+ */
+function local_sentaldocupload_get_blocking_eds_course_completion_document(int $courseid, int $userid): ?\stdClass {
+    global $DB;
+
+    if ($courseid <= 0 || $userid <= 0) {
+        return null;
+    }
+
+    if ($DB->get_manager()->table_exists('local_ncasign_jobs')) {
+        $columns = $DB->get_columns('local_ncasign_jobs');
+        if (isset($columns['userid']) && isset($columns['courseid']) && isset($columns['origin']) && isset($columns['status'])) {
+            $pending = $DB->get_record_sql(
+                "SELECT j.*
+                   FROM {local_ncasign_jobs} j
+                  WHERE j.userid = :userid
+                    AND j.courseid = :courseid
+                    AND j.origin = :origin
+                    AND j.status = :status
+               ORDER BY j.timecreated DESC",
+                [
+                    'userid' => $userid,
+                    'courseid' => $courseid,
+                    'origin' => 'course_completion',
+                    'status' => 'pending_manual',
+                ],
+                IGNORE_MULTIPLE
+            );
+
+            if ($pending) {
+                $pending->sentalblockstate = 'pending';
+                $pending->expirydate = null;
+                return $pending;
+            }
+        }
+    }
+
+    $active = local_sentaldocupload_get_active_eds_course_completion_document($courseid, $userid);
+    if ($active) {
+        $active->sentalblockstate = 'active';
+        return $active;
+    }
+
+    return null;
+}
+
+/**
  * Decide whether a manual scan should be visible in Public Profile.
  *
  * Type 2 supplementary documents are never public. Type 1 scans are public

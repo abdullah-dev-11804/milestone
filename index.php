@@ -144,19 +144,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $linkeduserids = array_values(array_unique(array_merge([$userid], $participantids)));
             foreach ($linkeduserids as $linkeduserid) {
                 $linkeduserid = (int)$linkeduserid;
-                $activeeds = local_sentaldocupload_get_active_eds_course_completion_document($courseid, $linkeduserid);
-                if (!$activeeds) {
+                $blockingeds = local_sentaldocupload_get_blocking_eds_course_completion_document($courseid, $linkeduserid);
+                if (!$blockingeds) {
                     continue;
                 }
 
                 $learner = $DB->get_record('user', ['id' => $linkeduserid], 'id,firstname,lastname,email,username', IGNORE_MISSING);
                 $course = get_course($courseid);
-                $expirytext = empty($activeeds->expirydate)
-                    ? get_string('noexpiry', 'local_sentaldocupload')
-                    : userdate((int)$activeeds->expirydate, get_string('strftimedate', 'langconfig'));
+                $ispending = ((string)($blockingeds->sentalblockstate ?? '') === 'pending');
+                $statustext = $ispending
+                    ? get_string('edsstatuspending', 'local_sentaldocupload')
+                    : get_string('edsstatusactive', 'local_sentaldocupload');
+                if ($ispending) {
+                    $expirytext = get_string('edsstatuspending', 'local_sentaldocupload');
+                } else if (empty($blockingeds->expirydate)) {
+                    $expirytext = get_string('noexpiry', 'local_sentaldocupload');
+                } else {
+                    $expirytext = userdate((int)$blockingeds->expirydate, get_string('strftimedate', 'langconfig'));
+                }
                 redirect($PAGE->url, get_string('activeedsdocumentblocksupload', 'local_sentaldocupload', (object)[
                     'learner' => $learner ? fullname($learner) : (string)$linkeduserid,
                     'course' => format_string($course->fullname),
+                    'status' => $statustext,
                     'expiry' => $expirytext,
                 ]), null, \core\output\notification::NOTIFY_ERROR);
             }
