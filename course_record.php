@@ -551,7 +551,8 @@ $statuslabel = get_string('statusnodocument', 'local_sentaldocupload');
 if ($status === 'active') {
     $statuslabel = get_string('statusactive', 'local_sentaldocupload');
 } else if ($status === 'expiring') {
-    $statuslabel = get_string('statusexpiring', 'local_sentaldocupload') . ($daysleft !== null ? ' - ' . max(0, $daysleft) . ' days left' : '');
+    $statuslabel = get_string('statusexpiring', 'local_sentaldocupload')
+        . ($daysleft !== null ? ' - ' . get_string('daysleft', 'local_sentaldocupload', max(0, $daysleft)) : '');
 } else if ($status === 'expired') {
     $statuslabel = get_string('statusexpired', 'local_sentaldocupload');
 }
@@ -585,13 +586,14 @@ echo html_writer::div(
 echo html_writer::start_tag('section', ['class' => 'sental-course-record-hero status-' . s($status), 'style' => $heroimagestyle]);
 echo html_writer::start_div('sental-course-record-hero-grid');
 echo html_writer::start_div('sental-course-record-hero-left');
-echo html_writer::div('Employee course record', 'sental-course-record-eyebrow');
+echo html_writer::div(get_string('employeecourserecord', 'local_sentaldocupload'), 'sental-course-record-eyebrow');
 echo html_writer::tag('h1', format_string($course->fullname));
 echo html_writer::div(
     html_writer::span(s($initials), 'sental-course-record-avatar') .
     html_writer::div(
         html_writer::tag('b', s($fullname)) .
-        html_writer::tag('small', s(trim(($site !== '' ? $site : 'Site') . ' - ' . ($position !== '' ? $position : 'Position'), ' -')))
+        html_writer::tag('small', s(trim(($site !== '' ? $site : get_string('site', 'local_sentaldocupload'))
+            . ' - ' . ($position !== '' ? $position : get_string('position', 'local_sentaldocupload')), ' -')))
     ),
     'sental-course-record-person'
 );
@@ -599,7 +601,7 @@ echo html_writer::div(html_writer::span('', 'dot') . html_writer::span(s($status
 echo html_writer::end_div();
 
 echo html_writer::start_div('sental-course-record-score');
-echo html_writer::div('Final score', 'sental-course-record-score-label');
+echo html_writer::div(get_string('finalscore', 'local_sentaldocupload'), 'sental-course-record-score-label');
 $scorevalue = $score['score'];
 $scorepercent = $scorevalue === null ? 0 : max(0, min(100, $scorevalue));
 $circumference = 326.7;
@@ -612,8 +614,8 @@ echo html_writer::div(
     . html_writer::div(html_writer::tag('b', $scorevalue === null ? '-' : (string)$scorevalue) . html_writer::tag('i', '/ 100'), 'sental-course-record-score-value'),
     'sental-course-record-ring'
 );
-echo html_writer::div($score['passed'] ? '&#10003; Test passed' : 'Passing score not reached', 'sental-course-record-pass');
-echo html_writer::div('Passing score: ' . html_writer::tag('b', (int)$score['passing'] . '%'), 'sental-course-record-threshold');
+echo html_writer::div($score['passed'] ? '&#10003; ' . get_string('testpassed', 'local_sentaldocupload') : get_string('passingscorenotreached', 'local_sentaldocupload'), 'sental-course-record-pass');
+echo html_writer::div(get_string('passingscore', 'local_sentaldocupload') . ': ' . html_writer::tag('b', (int)$score['passing'] . '%'), 'sental-course-record-threshold');
 echo html_writer::end_div();
 echo html_writer::end_div();
 echo html_writer::end_tag('section');
@@ -642,7 +644,7 @@ echo html_writer::end_div();
 echo html_writer::end_tag('section');
 
 echo html_writer::start_tag('section', ['class' => 'sental-course-record-card']);
-echo html_writer::tag('h2', 'Time to complete');
+echo html_writer::tag('h2', get_string('timetocomplete', 'local_sentaldocupload'));
 echo html_writer::div(
     html_writer::span(
         '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3.5 2.2"/></svg>',
@@ -650,28 +652,28 @@ echo html_writer::div(
     ) .
     html_writer::div(
         html_writer::div(
-            s((string)$durationhours) . ' ' . html_writer::span('h', 'unit') . ' ' .
-            s((string)$durationminutes) . ' ' . html_writer::span('min', 'unit'),
+            s((string)$durationhours) . ' ' . html_writer::span(get_string('hoursabbr', 'local_sentaldocupload'), 'unit') . ' ' .
+            s((string)$durationminutes) . ' ' . html_writer::span(get_string('minutesabbr', 'local_sentaldocupload'), 'unit'),
             'sental-course-record-duration'
         ) .
-        html_writer::div('total learning duration', 'sental-course-record-caption')
+        html_writer::div(get_string('totallearningduration', 'local_sentaldocupload'), 'sental-course-record-caption')
     ),
     'sental-course-record-time-top'
 );
 echo html_writer::div(
-    html_writer::div(html_writer::span('', 'sental-course-record-step-dot') . html_writer::div(html_writer::tag('small', 'Started') . html_writer::tag('b', s($formatdate($dates['started'])))), 'sental-course-record-step') .
-    html_writer::div(html_writer::span('', 'sental-course-record-step-dot') . html_writer::div(html_writer::tag('small', 'Completed') . html_writer::tag('b', s($formatdate($dates['completed'])))), 'sental-course-record-step done'),
+    html_writer::div(html_writer::span('', 'sental-course-record-step-dot') . html_writer::div(html_writer::tag('small', get_string('started', 'local_sentaldocupload')) . html_writer::tag('b', s($formatdate($dates['started'])))), 'sental-course-record-step') .
+    html_writer::div(html_writer::span('', 'sental-course-record-step-dot') . html_writer::div(html_writer::tag('small', get_string('completed', 'local_sentaldocupload')) . html_writer::tag('b', s($formatdate($dates['completed'])))), 'sental-course-record-step done'),
     'sental-course-record-steps'
 );
 echo html_writer::end_tag('section');
 echo html_writer::end_div();
 
 echo html_writer::start_tag('section', ['class' => 'sental-course-record-card sental-course-record-validity']);
-echo html_writer::tag('h2', 'Document validity');
+echo html_writer::tag('h2', get_string('documentvalidity', 'local_sentaldocupload'));
 echo html_writer::start_div('sental-course-record-timeline');
 if ($completiondoc) {
     echo html_writer::div(
-        html_writer::div('today - ' . s($formatdate(time())), 'lbl') .
+        html_writer::div(get_string('today', 'local_sentaldocupload') . ' - ' . s($formatdate(time())), 'lbl') .
         html_writer::div('', 'needle') .
         html_writer::div('', 'dotm'),
         'sental-course-record-timeline-mark',
@@ -685,14 +687,14 @@ echo html_writer::div(
 );
 echo html_writer::end_div();
 echo html_writer::div(
-    html_writer::div(html_writer::span('Issued') . html_writer::tag('b', s($formatdate($issuedate)))) .
-    html_writer::div(html_writer::span('Valid until') . html_writer::tag('b', s($formatdate($expirydate))), 'right'),
+    html_writer::div(html_writer::span(get_string('issued', 'local_sentaldocupload')) . html_writer::tag('b', s($formatdate($issuedate)))) .
+    html_writer::div(html_writer::span(get_string('validuntil', 'local_sentaldocupload')) . html_writer::tag('b', s($formatdate($expirydate))), 'right'),
     'sental-course-record-timeline-ends'
 );
 echo html_writer::div(
-    html_writer::span(html_writer::tag('i', '', ['class' => 'active']) . 'Active') .
-    html_writer::span(html_writer::tag('i', '', ['class' => 'expiring']) . 'Expiry window - 30 days') .
-    html_writer::span('Validity period: ' . html_writer::tag('b', $validitydays > 0 ? s((string)$validitydays) . ' days' : get_string('noexpiry', 'local_sentaldocupload'))),
+    html_writer::span(html_writer::tag('i', '', ['class' => 'active']) . get_string('statusactive', 'local_sentaldocupload')) .
+    html_writer::span(html_writer::tag('i', '', ['class' => 'expiring']) . get_string('expirywindow30days', 'local_sentaldocupload')) .
+    html_writer::span(get_string('validityperiod', 'local_sentaldocupload') . ': ' . html_writer::tag('b', $validitydays > 0 ? get_string('dayscount', 'local_sentaldocupload', $validitydays) : get_string('noexpiry', 'local_sentaldocupload'))),
     'sental-course-record-legend'
 );
 echo html_writer::end_tag('section');

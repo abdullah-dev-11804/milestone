@@ -154,6 +154,27 @@ $string['certificationstatus'] = 'Status';
 
 $string['certifications'] = 'Certifications';
 $string['mycertificationscoursebutton'] = 'My certifications';
+$string['employeecourserecord'] = 'Employee course record';
+$string['site'] = 'Site';
+$string['position'] = 'Position';
+$string['finalscore'] = 'Final score';
+$string['testpassed'] = 'Test passed';
+$string['passingscorenotreached'] = 'Passing score not reached';
+$string['passingscore'] = 'Passing score';
+$string['timetocomplete'] = 'Time to complete';
+$string['hoursabbr'] = 'h';
+$string['minutesabbr'] = 'min';
+$string['totallearningduration'] = 'Total learning duration';
+$string['started'] = 'Started';
+$string['completed'] = 'Completed';
+$string['documentvalidity'] = 'Document validity';
+$string['today'] = 'Today';
+$string['issued'] = 'Issued';
+$string['validuntil'] = 'Valid until';
+$string['expirywindow30days'] = 'Expiry window - 30 days';
+$string['validityperiod'] = 'Validity period';
+$string['dayscount'] = '{$a} days';
+$string['daysleft'] = '{$a} days left';
 
 $string['sentaldocumentuploadcoursebutton'] = 'SENTAL document upload';
 $string['courseuploadnotallowed'] = 'You are not allowed to upload SENTAL documents for this course.';
