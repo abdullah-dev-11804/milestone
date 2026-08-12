@@ -562,6 +562,24 @@ $heroimagestyle = $heroimage !== ''
     ? '--sental-course-record-image:url("' . s(str_replace(["\\", "\"", "\n", "\r"], ["\\\\", "\\\"", "", ""], $heroimage)) . '");'
     : '--sental-course-record-image:none;';
 
+$backurl = new moodle_url('/local/sentaldocupload/mydocuments.php');
+$referer = isset($_SERVER['HTTP_REFERER']) ? trim((string)$_SERVER['HTTP_REFERER']) : '';
+if ($referer !== '') {
+    $wwwrootparts = parse_url($CFG->wwwroot);
+    $refererparts = parse_url($referer);
+    $currenturl = (new moodle_url('/local/sentaldocupload/course_record.php', [
+        'courseid' => $courseid,
+        'userid' => $userid,
+    ]))->out(false);
+
+    if (!empty($refererparts['host']) &&
+            !empty($wwwrootparts['host']) &&
+            core_text::strtolower($refererparts['host']) === core_text::strtolower($wwwrootparts['host']) &&
+            strpos($referer, $currenturl) !== 0) {
+        $backurl = new moodle_url($referer);
+    }
+}
+
 $pageparams = ['courseid' => $courseid];
 if (!$isownrecord || $canviewdocuments) {
     $pageparams['userid'] = $userid;
@@ -577,8 +595,9 @@ echo $OUTPUT->header();
 
 echo html_writer::start_div('sental-course-record');
 echo html_writer::div(
-    html_writer::link(new moodle_url('/local/sentaldocupload/mydocuments.php'), '&lt; ' . get_string('certifications', 'local_sentaldocupload'), [
+    html_writer::link($backurl, '&lt; ' . get_string('back'), [
         'class' => 'sental-course-record-back',
+        'onclick' => 'if (window.history.length > 1) { window.history.back(); return false; }',
     ]),
     'sental-course-record-crumbs'
 );

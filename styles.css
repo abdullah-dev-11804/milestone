@@ -2974,6 +2974,11 @@ body.path-user .sental-profile-documents-table .sental-student-file-link {
     letter-spacing: 0;
 }
 
+body.path-local-sentaldocupload .sental-course-record-hero .sental-course-record-hero-left > h1 {
+    color: #fff !important;
+    text-shadow: 0 2px 14px rgba(0, 0, 0, .34);
+}
+
 .sental-course-record-person {
     display: flex;
     align-items: center;
