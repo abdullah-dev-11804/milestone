@@ -199,3 +199,7 @@ $string['couldnotcalculateexpiry'] = 'Не удалось рассчитать �
 $string['expirycalculated'] = 'Дата истечения рассчитана.';
 $string['removeparticipant'] = 'Удалить';
 $string['filter_request_failed'] = 'Не удалось применить фильтры. Обновите страницу и попробуйте снова.';
+$string['publicprofilevisibility'] = 'Видимость в публичном профиле';
+$string['publicprofilevisibilityupdated'] = 'Видимость в публичном профиле обновлена.';
+$string['publicprofileonlytype1'] = 'В публичном профиле можно показывать только документы о завершении курса.';
+$string['audit_action_public_visibility'] = 'Изменена видимость в публичном профиле';

@@ -148,6 +148,7 @@ function local_sentaldocupload_history_version_payload(stdClass $version): array
         'statusclass' => $statuspayload['statusclass'],
         'uploadedby' => (string)($version->uploadername ?: '-'),
         'uploadedat' => !empty($version->timecreated) ? userdate((int)$version->timecreated) : '-',
+        'showinpublicprofile' => !empty($version->showinpublicprofile) || !empty($version->publicprofileoverride) ? 1 : 0,
     ];
 }
 
@@ -186,6 +187,68 @@ function local_sentaldocupload_history_status_badge(array $payload): string {
     $class = clean_param($payload['statusclass'] ?? 'secondary', PARAM_ALPHANUMEXT);
     $text = $payload['statustext'] ?? get_string('statusnodocument', 'local_sentaldocupload');
     return html_writer::span(s($text), 'badge badge-' . $class . ' sental-cert-status sental-cert-status-' . s($payload['status'] ?? 'nodocument'));
+}
+
+function local_sentaldocupload_history_public_visibility_form(
+    int $documentid,
+    int $versionid,
+    int $userid,
+    string $documenttype,
+    bool $enabled,
+    moodle_url $returnurl
+): string {
+    if ($documentid <= 0 || $versionid <= 0 || $userid <= 0) {
+        return html_writer::span('-', 'sental-version-public-na');
+    }
+
+    $checkboxid = 'sental_public_' . $documentid . '_' . $userid;
+    $form = html_writer::start_tag('form', [
+        'method' => 'post',
+        'action' => (new moodle_url('/local/sentaldocupload/toggle_public.php'))->out(false),
+        'class' => 'sental-public-toggle-form',
+    ]);
+    if ($documenttype !== 'type1') {
+        $form = html_writer::start_tag('form', [
+            'method' => 'post',
+            'action' => (new moodle_url('/local/sentaldocupload/toggle_public.php'))->out(false),
+            'class' => 'sental-public-toggle-form',
+            'style' => 'display:none',
+        ]);
+    }
+    $form .= html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()]);
+    $form .= html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'documentid', 'value' => $documentid, 'class' => 'sental-public-documentid']);
+    $form .= html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'versionid', 'value' => $versionid, 'class' => 'sental-public-versionid']);
+    $form .= html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'userid', 'value' => $userid, 'class' => 'sental-public-userid']);
+    $form .= html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'returnurl', 'value' => $returnurl->out_as_local_url(false)]);
+    $form .= html_writer::start_div('form-check');
+    $attrs = [
+        'type' => 'checkbox',
+        'name' => 'showinpublic',
+        'value' => '1',
+        'id' => $checkboxid,
+        'class' => 'form-check-input sental-public-checkbox',
+    ];
+    if ($enabled) {
+        $attrs['checked'] = 'checked';
+    }
+    $form .= html_writer::empty_tag('input', $attrs);
+    $form .= html_writer::tag('label', get_string('showinpublicprofile', 'local_sentaldocupload'), [
+        'for' => $checkboxid,
+        'class' => 'form-check-label',
+    ]);
+    $form .= html_writer::end_div();
+    $form .= html_writer::tag('button', get_string('savechanges'), [
+        'type' => 'submit',
+        'class' => 'btn btn-sm btn-outline-primary mt-1',
+    ]);
+    $form .= html_writer::end_tag('form');
+
+    $naattrs = ['class' => 'sental-version-public-na'];
+    if ($documenttype === 'type1') {
+        $naattrs['style'] = 'display:none';
+    }
+
+    return $form . html_writer::span('-', '', $naattrs);
 }
 
 function local_sentaldocupload_history_render_results(int $page, int $perpage, moodle_url $pageurl, int $studentid, string $studentq, int $courseid, string $doctype, array $documenttypes): string {
@@ -273,6 +336,8 @@ function local_sentaldocupload_history_render_results(int $page, int $perpage, m
                               v.filename,
                               v.issuedate,
                               v.expirydate,
+                              v.showinpublicprofile,
+                              v.publicprofileoverride,
                               v.timecreated,
                               up.firstname AS uploaderfirstname,
                               up.lastname AS uploaderlastname
@@ -297,6 +362,8 @@ function local_sentaldocupload_history_render_results(int $page, int $perpage, m
         $selectedpayload = null;
         foreach ($versions as $version) {
             $payload = local_sentaldocupload_history_version_payload($version);
+            $payload['documentid'] = (int)$doc->documentid;
+            $payload['documenttype'] = (string)$doc->documenttype;
             $versionpayloads[] = $payload;
             if ((int)$version->versionno === (int)$doc->currentversion) {
                 $selectedpayload = $payload;
@@ -326,6 +393,7 @@ function local_sentaldocupload_history_render_results(int $page, int $perpage, m
         get_string('certificationstatus', 'local_sentaldocupload'),
         get_string('uploadedby', 'local_sentaldocupload'),
         get_string('uploadedat', 'local_sentaldocupload'),
+        get_string('publicprofilevisibility', 'local_sentaldocupload'),
         get_string('file', 'local_sentaldocupload'),
     ];
     $table->attributes['class'] = 'generaltable sental-version-history sental-version-history-compact sental-history-v055';
@@ -377,6 +445,9 @@ function local_sentaldocupload_history_render_results(int $page, int $perpage, m
                     'data-statusclass' => $payload['statusclass'] ?? 'secondary',
                     'data-uploadedby' => $payload['uploadedby'] ?? '-',
                     'data-uploadedat' => $payload['uploadedat'] ?? '-',
+                    'data-showinpublicprofile' => (int)($payload['showinpublicprofile'] ?? 0),
+                    'data-documentid' => (int)($payload['documentid'] ?? 0),
+                    'data-documenttype' => (string)($payload['documenttype'] ?? ''),
                 ];
                 if ($selectedversion && (int)$selectedversion['versionid'] === (int)$payload['versionid']) {
                     $attrs['selected'] = 'selected';
@@ -404,6 +475,14 @@ function local_sentaldocupload_history_render_results(int $page, int $perpage, m
         $statuscell = $selectedversion ? local_sentaldocupload_history_status_badge($selectedversion) : local_sentaldocupload_history_status_badge(local_sentaldocupload_history_status_payload(null, false));
         $uploader = $selectedversion['uploadedby'] ?? '-';
         $uploadedat = $selectedversion['uploadedat'] ?? '-';
+        $publiccell = local_sentaldocupload_history_public_visibility_form(
+            (int)$selecteddoc->documentid,
+            (int)($selectedversion['versionid'] ?? 0),
+            (int)$row->learnerid,
+            (string)$selecteddoc->documenttype,
+            !empty($selectedversion['showinpublicprofile']),
+            $pageurl
+        );
         $filecell = $selectedversion ? local_sentaldocupload_history_file_link($selectedversion) : '-';
 
         $table->data[] = [
@@ -416,6 +495,7 @@ function local_sentaldocupload_history_render_results(int $page, int $perpage, m
             html_writer::span($statuscell, 'sental-version-status'),
             html_writer::span(s($uploader), 'sental-version-uploadedby'),
             html_writer::span($uploadedat, 'sental-version-uploadedat'),
+            html_writer::span($publiccell, 'sental-version-publiccell'),
             html_writer::span($filecell, 'sental-version-filecell'),
         ];
     }
@@ -617,6 +697,9 @@ $filterjs = <<<HTML
             opt.dataset.statusclass = payload.statusclass || 'secondary';
             opt.dataset.uploadedby = payload.uploadedby || '-';
             opt.dataset.uploadedat = payload.uploadedat || '-';
+            opt.dataset.showinpublicprofile = payload.showinpublicprofile || '0';
+            opt.dataset.documentid = payload.documentid || '';
+            opt.dataset.documenttype = payload.documenttype || '';
             return opt;
         }
 
@@ -626,6 +709,7 @@ $filterjs = <<<HTML
             var status = row.querySelector('.sental-version-status');
             var uploadedby = row.querySelector('.sental-version-uploadedby');
             var uploadedat = row.querySelector('.sental-version-uploadedat');
+            var publiccell = row.querySelector('.sental-version-publiccell');
             var filecell = row.querySelector('.sental-version-filecell');
             if (issue) { issue.textContent = payload.issuedate || '-'; }
             if (expiry) { expiry.textContent = payload.expirydate || '-'; }
@@ -645,6 +729,21 @@ $filterjs = <<<HTML
                 filecell.innerHTML = '<a class="sental-file-link" target="_blank" href="' + href.replace(/"/g, '&quot;') + '" title="' + filename.replace(/"/g, '&quot;') + '"><span class="sental-version-filename"></span></a>';
                 var name = filecell.querySelector('.sental-version-filename');
                 if (name) { name.textContent = shortfilename; }
+            }
+            if (publiccell) {
+                var form = publiccell.querySelector('.sental-public-toggle-form');
+                var na = publiccell.querySelector('.sental-version-public-na');
+                var isTypeOne = payload.documenttype === 'type1';
+                if (form) {
+                    var versionInput = form.querySelector('.sental-public-versionid');
+                    var documentInput = form.querySelector('.sental-public-documentid');
+                    var checkbox = form.querySelector('.sental-public-checkbox');
+                    if (versionInput) { versionInput.value = payload.versionid || ''; }
+                    if (documentInput) { documentInput.value = payload.documentid || ''; }
+                    if (checkbox) { checkbox.checked = String(payload.showinpublicprofile || '0') === '1'; }
+                    form.style.display = isTypeOne ? '' : 'none';
+                }
+                if (na) { na.style.display = isTypeOne ? 'none' : ''; }
             }
         }
 
@@ -681,7 +780,11 @@ $filterjs = <<<HTML
                             statustext: selected.dataset.statustext,
                             statusclass: selected.dataset.statusclass,
                             uploadedby: selected.dataset.uploadedby,
-                            uploadedat: selected.dataset.uploadedat
+                            uploadedat: selected.dataset.uploadedat,
+                            showinpublicprofile: selected.dataset.showinpublicprofile,
+                            documentid: selected.dataset.documentid,
+                            documenttype: selected.dataset.documenttype,
+                            versionid: selected.value
                         });
                     }
                 });
@@ -704,7 +807,11 @@ $filterjs = <<<HTML
                         statustext: opt.dataset.statustext,
                         statusclass: opt.dataset.statusclass,
                         uploadedby: opt.dataset.uploadedby,
-                        uploadedat: opt.dataset.uploadedat
+                        uploadedat: opt.dataset.uploadedat,
+                        showinpublicprofile: opt.dataset.showinpublicprofile,
+                        documentid: opt.dataset.documentid,
+                        documenttype: opt.dataset.documenttype,
+                        versionid: opt.value
                     });
                 });
             });

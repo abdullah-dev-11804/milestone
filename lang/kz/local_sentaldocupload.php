@@ -199,3 +199,7 @@ $string['couldnotcalculateexpiry'] = 'Жарамдылық мерзімін ес
 $string['expirycalculated'] = 'Жарамдылық мерзімі есептелді.';
 $string['removeparticipant'] = 'Жою';
 $string['filter_request_failed'] = 'Сүзгілерді қолдану мүмкін болмады. Бетті жаңартып, қайта көріңіз.';
+$string['publicprofilevisibility'] = 'Публичный профильдегі көрінуі';
+$string['publicprofilevisibilityupdated'] = 'Публичный профильдегі көрінуі жаңартылды.';
+$string['publicprofileonlytype1'] = 'Публичный профильде тек курсты аяқтау құжаттарын көрсетуге болады.';
+$string['audit_action_public_visibility'] = 'Публичный профильдегі көрінуі өзгертілді';

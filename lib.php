@@ -1080,6 +1080,163 @@ function local_sentaldocupload_get_public_profile_scans(int $userid, ?int $cours
 }
 
 /**
+ * Does an NCA/EDS job use a Customcert template with Public Profile-hidden pages?
+ *
+ * @param int $jobid
+ * @return bool
+ */
+function local_sentaldocupload_ncasign_job_has_public_hidden_customcert_pages(int $jobid): bool {
+    global $DB;
+
+    $pagetable = new xmldb_table('customcert_pages');
+    if ($jobid <= 0
+            || !$DB->get_manager()->table_exists('local_ncasign_jobs')
+            || !$DB->get_manager()->table_exists('local_ncasign_templates')
+            || !$DB->get_manager()->table_exists('customcert_pages')
+            || !$DB->get_manager()->field_exists($pagetable, 'showinpublicprofile')) {
+        return false;
+    }
+
+    $sql = "SELECT t.id,
+                   t.templatepath,
+                   t.layoutconfig
+              FROM {local_ncasign_jobs} j
+              JOIN {local_ncasign_templates} t ON t.id = j.templateprofileid
+             WHERE j.id = :jobid";
+    $profile = $DB->get_record_sql($sql, ['jobid' => $jobid], IGNORE_MISSING);
+    if (!$profile) {
+        return false;
+    }
+
+    $templateid = 0;
+    if (!empty($profile->layoutconfig)) {
+        $layout = json_decode((string)$profile->layoutconfig, true);
+        if (is_array($layout) && !empty($layout['customcert']['templateid'])) {
+            $templateid = (int)$layout['customcert']['templateid'];
+        }
+    }
+    if ($templateid <= 0 && !empty($profile->templatepath)
+            && preg_match('/^customcert:(\d+)$/', (string)$profile->templatepath, $matches)) {
+        $templateid = (int)$matches[1];
+    }
+
+    return $templateid > 0 && $DB->record_exists('customcert_pages', [
+        'templateid' => $templateid,
+        'showinpublicprofile' => 0,
+    ]);
+}
+
+/**
+ * Return active EDS/NCA documents that can be displayed on Public Profile.
+ *
+ * @param int $userid
+ * @param int|null $courseid optional course filter
+ * @return array<int,\stdClass>
+ */
+function local_sentaldocupload_get_public_profile_eds_documents(int $userid, ?int $courseid = null): array {
+    global $DB;
+
+    if ($userid <= 0 || !$DB->get_manager()->table_exists('local_ncasign_jobs')) {
+        return [];
+    }
+
+    $params = [
+        'userid' => $userid,
+        'origin' => 'course_completion',
+        'completedmanual' => 'completed_manual',
+        'completedauto' => 'completed_auto',
+        'signedcomponent' => 'local_ncasign',
+        'publiccomponent' => 'local_ncasign',
+        'signedarea' => 'signedpdf',
+        'publicarea' => 'publicprofilepdf',
+        'dot' => '.',
+    ];
+    $coursewhere = '';
+    if (!empty($courseid)) {
+        $coursewhere = 'AND j.courseid = :courseid';
+        $params['courseid'] = $courseid;
+    }
+
+    $sql = "SELECT j.id,
+                   j.id AS jobid,
+                   j.userid,
+                   j.courseid,
+                   c.fullname AS coursefullname,
+                   c.shortname AS courseshortname,
+                   j.documenttitle,
+                   j.timecreated AS jobtimecreated,
+                   j.manualcompleted,
+                   j.autosigned,
+                   COALESCE(publicfile.filename, signedfile.filename) AS filename,
+                   COALESCE(publicfile.timemodified, signedfile.timemodified) AS filetimemodified,
+                   cc.timecompleted AS completiontime
+              FROM {local_ncasign_jobs} j
+              JOIN {course} c ON c.id = j.courseid
+              JOIN {files} signedfile ON signedfile.component = :signedcomponent
+                                      AND signedfile.filearea = :signedarea
+                                      AND signedfile.itemid = j.id
+                                      AND signedfile.filename <> :dot
+         LEFT JOIN {files} publicfile ON publicfile.component = :publiccomponent
+                                      AND publicfile.filearea = :publicarea
+                                      AND publicfile.itemid = j.id
+                                      AND publicfile.filename <> :dot
+         LEFT JOIN {course_completions} cc ON cc.course = j.courseid
+                                          AND cc.userid = j.userid
+             WHERE j.userid = :userid
+               AND j.origin = :origin
+               AND j.status IN (:completedmanual, :completedauto)
+               $coursewhere
+          ORDER BY c.fullname ASC, j.timecreated DESC, signedfile.id DESC";
+
+    $records = $DB->get_records_sql($sql, $params);
+    $visible = [];
+    $seen = [];
+    $now = time();
+
+    foreach ($records as $record) {
+        $coursekey = (int)$record->courseid;
+        if (isset($seen[$coursekey])) {
+            continue;
+        }
+
+        $issuedate = (int)($record->completiontime ?: $record->manualcompleted ?: $record->autosigned
+            ?: $record->filetimemodified ?: $record->jobtimecreated);
+        $validitydays = local_sentaldocupload_get_course_validity_days((int)$record->courseid);
+        $expirydate = local_sentaldocupload_calculate_expiry($issuedate, $validitydays);
+        if ($expirydate !== null && $expirydate < $now) {
+            continue;
+        }
+
+        $filename = trim((string)($record->documenttitle ?: $record->filename));
+        if ($filename === '') {
+            $filename = get_string('coursecompletiondocument', 'local_sentaldocupload');
+        }
+        if (strtolower(pathinfo($filename, PATHINFO_EXTENSION)) !== 'pdf') {
+            $filename .= '.pdf';
+        }
+
+        $record->versionid = -(int)$record->jobid;
+        $record->versionno = 1;
+        $record->filename = $filename;
+        $record->issuedate = $issuedate;
+        $record->expirydate = $expirydate;
+        $record->status = local_sentaldocupload_get_status($expirydate, true);
+        $record->statushtml = local_sentaldocupload_status_badge($record->status);
+        $record->viewerurl = (new moodle_url('/local/sentaldocupload/viewer.php', [
+            'ncasignjobid' => (int)$record->jobid,
+            'userid' => $userid,
+            'courseid' => (int)$record->courseid,
+            'public' => 1,
+        ]))->out(false);
+
+        $visible[(int)$record->jobid] = $record;
+        $seen[$coursekey] = true;
+    }
+
+    return $visible;
+}
+
+/**
  * Render the public profile Certification cards.
  *
  * @param int $userid
@@ -1087,7 +1244,9 @@ function local_sentaldocupload_get_public_profile_scans(int $userid, ?int $cours
  */
 function local_sentaldocupload_render_public_profile_certifications(int $userid): string {
     $scans = local_sentaldocupload_get_public_profile_scans($userid);
-    if (empty($scans)) {
+    $edsdocuments = local_sentaldocupload_get_public_profile_eds_documents($userid);
+    $documents = array_merge($edsdocuments, $scans);
+    if (empty($documents)) {
         return '';
     }
 
@@ -1096,7 +1255,7 @@ function local_sentaldocupload_render_public_profile_certifications(int $userid)
     };
 
     $out = html_writer::start_div('sental-public-profile-certifications');
-    foreach ($scans as $scan) {
+    foreach ($documents as $scan) {
         $status = local_sentaldocupload_get_status(empty($scan->expirydate) ? null : (int)$scan->expirydate, true);
         $out .= html_writer::start_div('sental-public-profile-cert-card status-' . $status);
         $out .= html_writer::div(
@@ -1496,19 +1655,20 @@ function local_sentaldocupload_myprofile_navigation(core_user\output\myprofile\t
  *
  * @param int $userid
  * @param int $courseid
- * @return array{source:string, scans:array, hasedsdocument:bool}
+ * @return array{source:string, scans:array, edsdocuments:array, hasedsdocument:bool}
  */
 function local_sentaldocupload_get_public_profile_display_state(int $userid, int $courseid): array {
     $hasedsdocument = local_sentaldocupload_user_course_has_eds_document($courseid, $userid);
     $scans = local_sentaldocupload_get_public_profile_scans($userid, $courseid);
+    $edsdocuments = local_sentaldocupload_get_public_profile_eds_documents($userid, $courseid);
 
     if ($hasedsdocument) {
-        return ['source' => 'eds', 'scans' => $scans, 'hasedsdocument' => true];
+        return ['source' => 'eds', 'scans' => $scans, 'edsdocuments' => $edsdocuments, 'hasedsdocument' => true];
     }
     if (!empty($scans)) {
-        return ['source' => 'type1scan', 'scans' => $scans, 'hasedsdocument' => false];
+        return ['source' => 'type1scan', 'scans' => $scans, 'edsdocuments' => [], 'hasedsdocument' => false];
     }
-    return ['source' => 'none', 'scans' => [], 'hasedsdocument' => false];
+    return ['source' => 'none', 'scans' => [], 'edsdocuments' => [], 'hasedsdocument' => false];
 }
 
 /**
@@ -1549,6 +1709,7 @@ function local_sentaldocupload_get_audit_action_label(string $actiontype): strin
         'download' => get_string('audit_action_download', 'local_sentaldocupload'),
         'course_completed' => get_string('audit_action_course_completed', 'local_sentaldocupload'),
         'public_view' => get_string('audit_action_public_view', 'local_sentaldocupload'),
+        'public_visibility' => get_string('audit_action_public_visibility', 'local_sentaldocupload'),
     ];
     return $map[$actiontype] ?? s($actiontype);
 }

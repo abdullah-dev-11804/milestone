@@ -220,3 +220,7 @@ $string['couldnotcalculateexpiry'] = 'Could not calculate expiry date.';
 $string['expirycalculated'] = 'Expiry date calculated.';
 $string['removeparticipant'] = 'Remove';
 $string['filter_request_failed'] = 'Filter request failed. Please refresh and try again.';
+$string['publicprofilevisibility'] = 'Public Profile visibility';
+$string['publicprofilevisibilityupdated'] = 'Public Profile visibility updated.';
+$string['publicprofileonlytype1'] = 'Only course completion documents can be shown in Public Profile.';
+$string['audit_action_public_visibility'] = 'Public Profile visibility changed';

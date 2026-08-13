@@ -44,6 +44,7 @@ $actions = [
     'download' => local_sentaldocupload_get_audit_action_label('download'),
     'course_completed' => local_sentaldocupload_get_audit_action_label('course_completed'),
     'public_view' => local_sentaldocupload_get_audit_action_label('public_view'),
+    'public_visibility' => local_sentaldocupload_get_audit_action_label('public_visibility'),
 ];
 
 function local_sentaldocupload_audit_filter_select($name, array $options, $selected, $alllabel) {

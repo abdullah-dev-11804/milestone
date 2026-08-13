@@ -21,22 +21,79 @@ $ispublicviewer = false;
 $isncasignviewer = false;
 
 if ($public) {
-    if (empty($versionid) || empty($userid) || empty($courseid)) {
-        throw new moodle_exception('filenotfound');
-    }
-
-    // Use the same Public Profile visibility helper used by the profile cards.
-    // This keeps Public Profile, View Document, and file serving logic aligned.
-    $publicrecords = local_sentaldocupload_get_public_profile_scans($userid, $courseid);
-    foreach ($publicrecords as $publicrecord) {
-        if ((int)$publicrecord->versionid === $versionid) {
-            $record = $publicrecord;
-            $ispublicviewer = true;
-            break;
+    if ($ncasignjobid > 0) {
+        if (empty($userid) || empty($courseid)) {
+            throw new moodle_exception('filenotfound');
         }
-    }
-    if (!$record) {
+
+        $active = local_sentaldocupload_get_active_eds_course_completion_document($courseid, $userid);
+        if (!$active || (int)$active->id !== $ncasignjobid) {
+            throw new moodle_exception('filenotfound');
+        }
+
+        $course = $DB->get_record('course', ['id' => $courseid], 'id,fullname,shortname', IGNORE_MISSING);
+        $coursefullname = $course
+            ? (string)$course->fullname
+            : get_string('courseunavailable', 'local_sentaldocupload', $courseid);
+        $courseshortname = $course ? (string)$course->shortname : '';
+
+        $fs = get_file_storage();
+        $files = $fs->get_area_files(
+            $context->id,
+            'local_ncasign',
+            \local_ncasign\local\job_manager::FILEAREA_PUBLICPROFILEPDF,
+            $ncasignjobid,
+            'id DESC',
+            false
+        );
+        $file = reset($files);
+        if (!$file && !local_sentaldocupload_ncasign_job_has_public_hidden_customcert_pages($ncasignjobid)) {
+            $files = $fs->get_area_files(
+                $context->id,
+                'local_ncasign',
+                \local_ncasign\local\job_manager::FILEAREA_SIGNEDPDF,
+                $ncasignjobid,
+                'id DESC',
+                false
+            );
+            $file = reset($files);
+        }
+        if (!$file) {
+            throw new moodle_exception('filenotfound');
+        }
+
+        $record = (object)[
+            'id' => -$ncasignjobid,
+            'versionid' => -$ncasignjobid,
+            'documentid' => -$ncasignjobid,
+            'versionno' => 1,
+            'filename' => $file->get_filename(),
+            'issuedate' => (int)($active->issuedate ?? $active->timecreated ?? time()),
+            'expirydate' => empty($active->expirydate) ? null : (int)$active->expirydate,
+            'courseid' => $courseid,
+            'documenttype' => 'type1',
+            'coursefullname' => $coursefullname,
+            'courseshortname' => $courseshortname,
+            'userid' => $userid,
+        ];
+        $ispublicviewer = true;
+        $isncasignviewer = true;
+    } else if (empty($versionid) || empty($userid) || empty($courseid)) {
         throw new moodle_exception('filenotfound');
+    } else {
+        // Use the same Public Profile visibility helper used by the profile cards.
+        // This keeps Public Profile, View Document, and file serving logic aligned.
+        $publicrecords = local_sentaldocupload_get_public_profile_scans($userid, $courseid);
+        foreach ($publicrecords as $publicrecord) {
+            if ((int)$publicrecord->versionid === $versionid) {
+                $record = $publicrecord;
+                $ispublicviewer = true;
+                break;
+            }
+        }
+        if (!$record) {
+            throw new moodle_exception('filenotfound');
+        }
     }
 } else {
     require_login();
@@ -162,7 +219,20 @@ $PAGE->set_heading(get_string('documentviewer', 'local_sentaldocupload'));
 $PAGE->set_pagelayout('embedded');
 $PAGE->requires->css(new moodle_url('/local/sentaldocupload/styles.css'));
 
-if ($isncasignviewer) {
+if ($isncasignviewer && $ispublicviewer) {
+    $previewurl = new moodle_url('/local/sentaldocupload/publicncasign.php', [
+        'jobid' => $ncasignjobid,
+        'userid' => $userid,
+        'courseid' => $courseid,
+        'preview' => 1,
+        'inline' => 1,
+    ]);
+    $downloadurl = new moodle_url('/local/sentaldocupload/publicncasign.php', [
+        'jobid' => $ncasignjobid,
+        'userid' => $userid,
+        'courseid' => $courseid,
+    ]);
+} else if ($isncasignviewer) {
     $previewurl = new moodle_url('/local/ncasign/download_artifact.php', [
         'jobid' => $ncasignjobid,
         'type' => 'signedpdf',
