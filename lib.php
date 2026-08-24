@@ -1221,6 +1221,28 @@ function local_sentaldocupload_ncasign_job_has_public_hidden_customcert_pages(in
         return false;
     }
 
+    $templateid = local_sentaldocupload_ncasign_get_customcert_templateid($jobid);
+    return $templateid > 0 && $DB->record_exists('customcert_pages', [
+        'templateid' => $templateid,
+        'showinpublicprofile' => 0,
+    ]);
+}
+
+/**
+ * Resolve the Customcert template id used by an EDS/NCA job.
+ *
+ * @param int $jobid
+ * @return int
+ */
+function local_sentaldocupload_ncasign_get_customcert_templateid(int $jobid): int {
+    global $DB;
+
+    if ($jobid <= 0
+            || !$DB->get_manager()->table_exists('local_ncasign_jobs')
+            || !$DB->get_manager()->table_exists('local_ncasign_templates')) {
+        return 0;
+    }
+
     $sql = "SELECT t.id,
                    t.templatepath,
                    t.layoutconfig
@@ -1229,7 +1251,7 @@ function local_sentaldocupload_ncasign_job_has_public_hidden_customcert_pages(in
              WHERE j.id = :jobid";
     $profile = $DB->get_record_sql($sql, ['jobid' => $jobid], IGNORE_MISSING);
     if (!$profile) {
-        return false;
+        return 0;
     }
 
     $templateid = 0;
@@ -1244,10 +1266,233 @@ function local_sentaldocupload_ncasign_job_has_public_hidden_customcert_pages(in
         $templateid = (int)$matches[1];
     }
 
-    return $templateid > 0 && $DB->record_exists('customcert_pages', [
-        'templateid' => $templateid,
-        'showinpublicprofile' => 0,
-    ]);
+    return $templateid;
+}
+
+/**
+ * Get the correct EDS/NCA PDF for the Public Profile viewer.
+ *
+ * If the linked Customcert template hides pages from Public Profile, this returns
+ * a filtered public copy. Existing jobs are rebuilt on demand from the stored
+ * original PDF, so changing the Customcert page checkbox also affects old EDS
+ * documents without altering the signed/internal master PDF.
+ *
+ * @param int $jobid
+ * @return stored_file|null
+ */
+function local_sentaldocupload_get_ncasign_public_profile_file(int $jobid): ?stored_file {
+    $context = context_system::instance();
+    $fs = get_file_storage();
+
+    $publicfile = local_sentaldocupload_get_latest_file(
+        'local_ncasign',
+        \local_ncasign\local\job_manager::FILEAREA_PUBLICPROFILEPDF,
+        $jobid
+    );
+
+    $templateid = local_sentaldocupload_ncasign_get_customcert_templateid($jobid);
+    if ($templateid <= 0 || !local_sentaldocupload_ncasign_job_has_public_hidden_customcert_pages($jobid)) {
+        return local_sentaldocupload_get_latest_file(
+            'local_ncasign',
+            \local_ncasign\local\job_manager::FILEAREA_SIGNEDPDF,
+            $jobid
+        ) ?: $publicfile;
+    }
+
+    if ($publicfile && !local_sentaldocupload_ncasign_public_profile_file_is_stale($templateid, $publicfile)) {
+        return $publicfile;
+    }
+
+    local_sentaldocupload_rebuild_ncasign_public_profile_file($jobid, $templateid);
+
+    return local_sentaldocupload_get_latest_file(
+        'local_ncasign',
+        \local_ncasign\local\job_manager::FILEAREA_PUBLICPROFILEPDF,
+        $jobid
+    );
+}
+
+/**
+ * Return the latest non-directory file from a Moodle file area.
+ *
+ * @param string $component
+ * @param string $filearea
+ * @param int $itemid
+ * @return stored_file|null
+ */
+function local_sentaldocupload_get_latest_file(string $component, string $filearea, int $itemid): ?stored_file {
+    $context = context_system::instance();
+    $fs = get_file_storage();
+    $files = $fs->get_area_files($context->id, $component, $filearea, $itemid, 'id DESC', false);
+
+    return $files ? reset($files) : null;
+}
+
+/**
+ * Check whether a public-profile copy predates the current Customcert page visibility settings.
+ *
+ * @param int $templateid
+ * @param stored_file $file
+ * @return bool
+ */
+function local_sentaldocupload_ncasign_public_profile_file_is_stale(int $templateid, stored_file $file): bool {
+    global $DB;
+
+    $latestpagechange = (int)$DB->get_field_sql(
+        "SELECT MAX(timemodified)
+           FROM {customcert_pages}
+          WHERE templateid = :templateid",
+        ['templateid' => $templateid]
+    );
+
+    return $latestpagechange > 0 && $file->get_timemodified() < $latestpagechange;
+}
+
+/**
+ * Rebuild the Public Profile-only PDF copy for an old EDS/NCA job.
+ *
+ * @param int $jobid
+ * @param int $templateid
+ * @return void
+ */
+function local_sentaldocupload_rebuild_ncasign_public_profile_file(int $jobid, int $templateid): void {
+    global $CFG;
+
+    $sourcefile = local_sentaldocupload_get_latest_file(
+        'local_ncasign',
+        \local_ncasign\local\job_manager::FILEAREA_ORIGINALPDF,
+        $jobid
+    );
+    if (!$sourcefile) {
+        $sourcefile = local_sentaldocupload_get_latest_file(
+            'local_ncasign',
+            \local_ncasign\local\job_manager::FILEAREA_SIGNEDPDF,
+            $jobid
+        );
+    }
+    if (!$sourcefile) {
+        return;
+    }
+
+    $content = local_sentaldocupload_filter_pdf_for_customcert_public_profile(
+        $sourcefile->get_content(),
+        $templateid,
+        $jobid
+    );
+    if ($content === '') {
+        return;
+    }
+
+    $manager = new \local_ncasign\local\job_manager();
+    $manager->attach_public_profile_binary_to_job(
+        $jobid,
+        'public_' . $sourcefile->get_filename(),
+        $content
+    );
+}
+
+/**
+ * Create a copy of a PDF containing only Customcert pages enabled for Public Profile.
+ *
+ * @param string $pdfbytes
+ * @param int $templateid
+ * @param int $jobid
+ * @return string
+ */
+function local_sentaldocupload_filter_pdf_for_customcert_public_profile(
+    string $pdfbytes,
+    int $templateid,
+    int $jobid
+): string {
+    global $CFG, $DB;
+
+    if ($pdfbytes === '' || $templateid <= 0) {
+        return '';
+    }
+
+    $autoload = $CFG->dirroot . '/local/ncasign/vendor/autoload.php';
+    if (is_readable($autoload)) {
+        require_once($autoload);
+    }
+    $safefpdi = $CFG->dirroot . '/local/ncasign/classes/local/safe_fpdi.php';
+    if (class_exists('\setasign\Fpdi\Tcpdf\Fpdi') && is_readable($safefpdi)
+            && !class_exists('\local_ncasign\local\safe_fpdi')) {
+        require_once($safefpdi);
+    }
+    if (!class_exists('\local_ncasign\local\safe_fpdi')) {
+        return '';
+    }
+
+    $pages = $DB->get_records(
+        'customcert_pages',
+        ['templateid' => $templateid],
+        'sequence ASC',
+        'id, sequence, showinpublicprofile'
+    );
+    if (!$pages) {
+        return '';
+    }
+
+    $visiblepages = [];
+    $pageno = 0;
+    foreach ($pages as $page) {
+        $pageno++;
+        if (!property_exists($page, 'showinpublicprofile') || !empty($page->showinpublicprofile)) {
+            $visiblepages[$pageno] = true;
+        }
+    }
+    if (!$visiblepages) {
+        return '';
+    }
+
+    $tmpdir = make_request_directory();
+    if (!$tmpdir) {
+        return '';
+    }
+
+    $sourcepath = $tmpdir . DIRECTORY_SEPARATOR . 'ncasign_public_profile_' . $jobid . '.pdf';
+    file_put_contents($sourcepath, $pdfbytes);
+
+    $pdf = new \local_ncasign\local\safe_fpdi('P', 'pt');
+    $pdf->setPrintHeader(false);
+    $pdf->setPrintFooter(false);
+    $pdf->SetAutoPageBreak(false, 0);
+    $pdf->SetMargins(0, 0, 0, true);
+    $pdf->SetHeaderMargin(0);
+    $pdf->SetFooterMargin(0);
+    $pdf->SetCreator('local_sentaldocupload');
+    $pdf->SetAuthor('local_sentaldocupload');
+
+    ob_start();
+    try {
+        $pagecount = $pdf->setSourceFile($sourcepath);
+        $rendered = 0;
+        for ($pageno = 1; $pageno <= $pagecount; $pageno++) {
+            if (empty($visiblepages[$pageno])) {
+                continue;
+            }
+
+            $template = $pdf->importPage($pageno);
+            $size = $pdf->getTemplateSize($template);
+            $width = (float)($size['width'] ?? $size['w'] ?? 595.0);
+            $height = (float)($size['height'] ?? $size['h'] ?? 842.0);
+            $orientation = ($width > $height) ? 'L' : 'P';
+
+            $pdf->AddPage($orientation, [$width, $height]);
+            $pdf->useTemplate($template, 0, 0, $width, $height, true);
+            $rendered++;
+        }
+
+        return $rendered > 0 ? (string)$pdf->Output('', 'S') : '';
+    } catch (Throwable $e) {
+        error_log('local_sentaldocupload: failed to rebuild public EDS PDF for job ' . $jobid . ': ' . $e->getMessage());
+        return '';
+    } finally {
+        $buffer = ob_get_clean();
+        if ($buffer !== '') {
+            error_log('local_sentaldocupload: public EDS PDF rebuild emitted output for job ' . $jobid);
+        }
+    }
 }
 
 /**

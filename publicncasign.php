@@ -17,30 +17,7 @@ if (!$active || (int)$active->id !== $jobid) {
     throw new moodle_exception('filenotfound');
 }
 
-$context = context_system::instance();
-$fs = get_file_storage();
-
-$files = $fs->get_area_files(
-    $context->id,
-    'local_ncasign',
-    \local_ncasign\local\job_manager::FILEAREA_PUBLICPROFILEPDF,
-    $jobid,
-    'id DESC',
-    false
-);
-$file = reset($files);
-
-if (!$file && !local_sentaldocupload_ncasign_job_has_public_hidden_customcert_pages($jobid)) {
-    $files = $fs->get_area_files(
-        $context->id,
-        'local_ncasign',
-        \local_ncasign\local\job_manager::FILEAREA_SIGNEDPDF,
-        $jobid,
-        'id DESC',
-        false
-    );
-    $file = reset($files);
-}
+$file = local_sentaldocupload_get_ncasign_public_profile_file($jobid);
 
 if (!$file) {
     throw new moodle_exception('filenotfound');

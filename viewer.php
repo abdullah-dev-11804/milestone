@@ -37,27 +37,7 @@ if ($public) {
             : get_string('courseunavailable', 'local_sentaldocupload', $courseid);
         $courseshortname = $course ? (string)$course->shortname : '';
 
-        $fs = get_file_storage();
-        $files = $fs->get_area_files(
-            $context->id,
-            'local_ncasign',
-            \local_ncasign\local\job_manager::FILEAREA_PUBLICPROFILEPDF,
-            $ncasignjobid,
-            'id DESC',
-            false
-        );
-        $file = reset($files);
-        if (!$file && !local_sentaldocupload_ncasign_job_has_public_hidden_customcert_pages($ncasignjobid)) {
-            $files = $fs->get_area_files(
-                $context->id,
-                'local_ncasign',
-                \local_ncasign\local\job_manager::FILEAREA_SIGNEDPDF,
-                $ncasignjobid,
-                'id DESC',
-                false
-            );
-            $file = reset($files);
-        }
+        $file = local_sentaldocupload_get_ncasign_public_profile_file($ncasignjobid);
         if (!$file) {
             throw new moodle_exception('filenotfound');
         }
