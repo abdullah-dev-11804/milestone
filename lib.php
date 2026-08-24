@@ -714,6 +714,130 @@ function local_sentaldocupload_get_next_version_number(int $documentid): int {
 }
 
 /**
+ * Return sorted learner ids linked to a document.
+ *
+ * @param int $documentid
+ * @return int[]
+ */
+function local_sentaldocupload_get_document_userids(int $documentid): array {
+    global $DB;
+
+    $records = $DB->get_records('sental_modeb_doc_user', ['documentid' => $documentid], 'userid ASC', 'userid');
+    $userids = array_map(static function($record): int {
+        return (int)$record->userid;
+    }, $records);
+    $userids = array_values(array_unique($userids));
+    sort($userids, SORT_NUMERIC);
+
+    return $userids;
+}
+
+/**
+ * Find an existing document only when its linked learners exactly match this upload.
+ *
+ * Shared/group uploaded documents must not be versioned by a later single-user
+ * replacement, otherwise the new file appears for every learner linked to the
+ * old shared document.
+ *
+ * @param int $courseid
+ * @param string $documenttype
+ * @param string $customlabel
+ * @param int[] $linkeduserids
+ * @return stdClass|false
+ */
+function local_sentaldocupload_find_matching_document_for_users(
+    int $courseid,
+    string $documenttype,
+    string $customlabel,
+    array $linkeduserids
+) {
+    global $DB;
+
+    $linkeduserids = array_values(array_unique(array_map('intval', $linkeduserids)));
+    sort($linkeduserids, SORT_NUMERIC);
+    if (!$linkeduserids) {
+        return false;
+    }
+
+    [$userinsql, $userparams] = $DB->get_in_or_equal($linkeduserids, SQL_PARAMS_NAMED, 'linkeduser');
+    $params = [
+        'courseid' => $courseid,
+        'documenttype' => $documenttype,
+    ] + $userparams;
+
+    $labelsql = '';
+    if ($documenttype === 'type2') {
+        $labelsql = 'AND d.customlabel = :customlabel';
+        $params['customlabel'] = $customlabel;
+    }
+
+    $sql = "SELECT DISTINCT d.*
+              FROM {sental_modeb_doc} d
+              JOIN {sental_modeb_doc_user} du ON du.documentid = d.id
+             WHERE d.courseid = :courseid
+               AND d.documenttype = :documenttype
+               $labelsql
+               AND du.userid $userinsql
+          ORDER BY d.id DESC";
+
+    foreach ($DB->get_records_sql($sql, $params) as $candidate) {
+        if (local_sentaldocupload_get_document_userids((int)$candidate->id) === $linkeduserids) {
+            return $candidate;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Remove selected learners from older documents that conflict with the new upload.
+ *
+ * This keeps one current Type 1 course-completion document per learner/course,
+ * while allowing the remaining learners on an old group document to keep it.
+ *
+ * @param int $documentid document that should remain linked
+ * @param int $userid learner being linked to the current document
+ * @param int $courseid
+ * @param string $documenttype
+ * @param string $customlabel
+ * @return void
+ */
+function local_sentaldocupload_unlink_conflicting_user_documents(
+    int $documentid,
+    int $userid,
+    int $courseid,
+    string $documenttype,
+    string $customlabel = ''
+): void {
+    global $DB;
+
+    $params = [
+        'documentid' => $documentid,
+        'userid' => $userid,
+        'courseid' => $courseid,
+        'documenttype' => $documenttype,
+    ];
+    $labelsql = '';
+    if ($documenttype === 'type2') {
+        $labelsql = 'AND d.customlabel = :customlabel';
+        $params['customlabel'] = $customlabel;
+    }
+
+    $sql = "SELECT du.id
+              FROM {sental_modeb_doc_user} du
+              JOIN {sental_modeb_doc} d ON d.id = du.documentid
+             WHERE du.userid = :userid
+               AND d.courseid = :courseid
+               AND d.documenttype = :documenttype
+               $labelsql
+               AND d.id <> :documentid";
+
+    foreach ($DB->get_records_sql($sql, $params) as $link) {
+        $DB->delete_records('sental_modeb_doc_user', ['id' => (int)$link->id]);
+    }
+}
+
+/**
  * Link a document to a learner if that link does not already exist.
  *
  * @param int $documentid
@@ -1397,6 +1521,9 @@ function local_sentaldocupload_get_profile_document_rows(int $userid): array {
                 'ncasignjobid' => $jobid,
                 'profileviewurl' => (new moodle_url('/local/sentaldocupload/viewer.php', [
                     'ncasignjobid' => $jobid,
+                    'userid' => $userid,
+                    'courseid' => (int)$row->courseid,
+                    'public' => 1,
                 ]))->out(false),
             ];
         }

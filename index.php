@@ -226,36 +226,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // - Type 1 has one course-completion document record per learner/course; every replacement becomes v2, v3...
         // - Type 2 has one supplementary document record per learner/course/custom label; uploading the same label again becomes v2, v3...
         //   Uploading a different custom label creates a separate supplementary document record.
-        $existing = false;
-        if ($documenttype === 'type1') {
-            $sql = "SELECT d.*
-                      FROM {sental_modeb_doc} d
-                      JOIN {sental_modeb_doc_user} du ON du.documentid = d.id
-                     WHERE d.courseid = :courseid
-                       AND d.documenttype = :documenttype
-                       AND du.userid = :userid
-                  ORDER BY d.id DESC";
-            $existing = $DB->get_record_sql($sql, [
-                'courseid' => $courseid,
-                'documenttype' => $documenttype,
-                'userid' => $userid,
-            ], IGNORE_MULTIPLE);
-        } else if ($documenttype === 'type2') {
-            $sql = "SELECT d.*
-                      FROM {sental_modeb_doc} d
-                      JOIN {sental_modeb_doc_user} du ON du.documentid = d.id
-                     WHERE d.courseid = :courseid
-                       AND d.documenttype = :documenttype
-                       AND du.userid = :userid
-                       AND d.customlabel = :customlabel
-                  ORDER BY d.id DESC";
-            $existing = $DB->get_record_sql($sql, [
-                'courseid' => $courseid,
-                'documenttype' => $documenttype,
-                'userid' => $userid,
-                'customlabel' => $customlabel,
-            ], IGNORE_MULTIPLE);
-        }
+        $existing = local_sentaldocupload_find_matching_document_for_users(
+            $courseid,
+            $documenttype,
+            $customlabel,
+            $linkeduserids
+        );
 
         // Public profile logic is stored per linked learner because one file can be linked
         // to multiple learners and EDS availability may differ per learner.
@@ -408,6 +384,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         foreach ($linkeduserids as $linkeduserid) {
             $linkeduserid = (int)$linkeduserid;
+            local_sentaldocupload_unlink_conflicting_user_documents(
+                $documentid,
+                $linkeduserid,
+                $courseid,
+                $documenttype,
+                $customlabel
+            );
             local_sentaldocupload_link_document_user(
                 $documentid,
                 $linkeduserid,
