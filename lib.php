@@ -1202,27 +1202,15 @@ function local_sentaldocupload_get_public_profile_scans(int $userid, ?int $cours
 /**
  * Resolve Public Profile visibility for a manual-upload document row.
  *
- * New edits are stored per learner/document link. Older uploads may have saved
- * the flag only on the document/version rows, so those remain fallback values
- * until an admin explicitly edits visibility for that learner/document.
+ * Public Profile visibility is learner/document-specific. Document and version
+ * flags are kept only as old summary fields and must not override this row.
  *
  * @param stdClass $record
  * @return bool
  */
 function local_sentaldocupload_record_is_public_profile_visible(stdClass $record): bool {
-    $userpublic = !empty($record->user_showinpublicprofile)
+    return !empty($record->user_showinpublicprofile)
         || !empty($record->user_publicprofileoverride);
-
-    if (local_sentaldocupload_has_public_profile_visibility_edit(
-            (int)($record->documentid ?? 0),
-            (int)($record->userid ?? 0))) {
-        return $userpublic;
-    }
-
-    return $userpublic
-        || !empty($record->version_showinpublicprofile)
-        || !empty($record->version_publicprofileoverride)
-        || !empty($record->doc_showinpublicprofile);
 }
 
 /**
