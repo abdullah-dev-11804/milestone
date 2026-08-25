@@ -65,11 +65,18 @@ function local_sentaldocupload_user_course_has_eds_document(int $courseid, int $
     if ($DB->get_manager()->table_exists('local_ncasign_jobs')) {
         $columns = $DB->get_columns('local_ncasign_jobs');
         if (isset($columns['userid']) && isset($columns['courseid']) && isset($columns['origin'])) {
-            if ($DB->record_exists('local_ncasign_jobs', [
+            $inactive = local_sentaldocupload_ncasign_inactive_statuses();
+            [$notinsql, $notinparams] = $DB->get_in_or_equal($inactive, SQL_PARAMS_NAMED, 'ncastatus', false);
+            $params = [
                 'userid' => $userid,
                 'courseid' => $courseid,
                 'origin' => 'course_completion',
-            ])) {
+            ] + $notinparams;
+            if ($DB->record_exists_select(
+                'local_ncasign_jobs',
+                "userid = :userid AND courseid = :courseid AND origin = :origin AND status $notinsql",
+                $params
+            )) {
                 return true;
             }
         }
@@ -121,6 +128,86 @@ function local_sentaldocupload_user_course_has_eds_document(int $courseid, int $
     }
 
     return false;
+}
+
+/**
+ * NCASign job statuses that must not behave as active/generated documents.
+ *
+ * @return string[]
+ */
+function local_sentaldocupload_ncasign_inactive_statuses(): array {
+    return ['replaced_by_upload', 'soft_deleted'];
+}
+
+/**
+ * Soft-delete active NCASign course-completion jobs replaced by a Type 1 upload.
+ *
+ * @param int $courseid
+ * @param int $userid
+ * @param int $actorid
+ * @param int $documentid
+ * @param int $versionid
+ * @return int number of jobs marked replaced
+ */
+function local_sentaldocupload_replace_ncasign_course_completion_jobs(
+    int $courseid,
+    int $userid,
+    int $actorid,
+    int $documentid,
+    int $versionid
+): int {
+    global $DB;
+
+    if ($courseid <= 0 || $userid <= 0 || !$DB->get_manager()->table_exists('local_ncasign_jobs')) {
+        return 0;
+    }
+
+    $inactive = local_sentaldocupload_ncasign_inactive_statuses();
+    [$notinsql, $notinparams] = $DB->get_in_or_equal($inactive, SQL_PARAMS_NAMED, 'replaceinactive', false);
+    $params = [
+        'userid' => $userid,
+        'courseid' => $courseid,
+        'origin' => 'course_completion',
+    ] + $notinparams;
+
+    $jobs = $DB->get_records_select(
+        'local_ncasign_jobs',
+        "userid = :userid AND courseid = :courseid AND origin = :origin AND status $notinsql",
+        $params,
+        'timecreated DESC'
+    );
+    if (!$jobs) {
+        return 0;
+    }
+
+    $manager = class_exists('\local_ncasign\local\job_manager')
+        ? new \local_ncasign\local\job_manager()
+        : null;
+    $count = 0;
+    foreach ($jobs as $job) {
+        $reason = 'Replaced by uploaded Type 1 course completion document #' . $documentid .
+            ' version #' . $versionid . ' by user #' . $actorid . '.';
+        if ($manager) {
+            if ($manager->soft_delete_job(
+                (int)$job->id,
+                \local_ncasign\local\job_manager::JOB_REPLACED_BY_UPLOAD,
+                $reason,
+                $actorid
+            )) {
+                $count++;
+            }
+        } else {
+            $DB->update_record('local_ncasign_jobs', (object)[
+                'id' => (int)$job->id,
+                'status' => 'replaced_by_upload',
+                'autosignnote' => $reason,
+                'timemodified' => time(),
+            ]);
+            $count++;
+        }
+    }
+
+    return $count;
 }
 
 /**

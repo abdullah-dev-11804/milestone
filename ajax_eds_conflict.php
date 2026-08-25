@@ -28,6 +28,7 @@ $result = [
     'success' => true,
     'blocked' => false,
     'message' => '',
+    'conflicts' => [],
 ];
 
 try {
@@ -74,13 +75,25 @@ try {
         }
 
         $result['blocked'] = true;
-        $result['message'] = get_string('activeedsdocumentblocksupload', 'local_sentaldocupload', (object)[
+        $message = get_string('activeedsdocumentblocksupload', 'local_sentaldocupload', (object)[
             'learner' => $learner ? fullname($learner) : (string)$userid,
             'course' => format_string($course->fullname),
             'status' => $statustext,
             'expiry' => $expirytext,
         ]);
-        break;
+        $result['conflicts'][] = [
+            'userid' => $userid,
+            'learner' => $learner ? fullname($learner) : (string)$userid,
+            'course' => format_string($course->fullname),
+            'status' => $statustext,
+            'expiry' => $expirytext,
+            'message' => $message,
+        ];
+    }
+    if (!empty($result['conflicts'])) {
+        $result['message'] = implode("\n", array_map(static function(array $conflict): string {
+            return (string)($conflict['message'] ?? '');
+        }, $result['conflicts']));
     }
 } catch (Throwable $e) {
     error_log('SENTAL EDS conflict AJAX failed: ' . $e->getMessage());
@@ -88,6 +101,7 @@ try {
         'success' => false,
         'blocked' => false,
         'message' => get_string('edsconflictcheckfailed', 'local_sentaldocupload'),
+        'conflicts' => [],
     ];
 }
 

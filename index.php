@@ -40,6 +40,7 @@ $PAGE->requires->js_call_amd('local_sentaldocupload/bulk_upload', 'init', [
     [
         'edsconflictchecking' => get_string('edsconflictchecking', 'local_sentaldocupload'),
         'edsconflictcheckfailed' => get_string('edsconflictcheckfailed', 'local_sentaldocupload'),
+        'edsreplaceconfirmfallback' => get_string('edsreplaceconfirmfallback', 'local_sentaldocupload'),
     ],
     $ajaxedsconflicturl->out(false),
 ]);
@@ -87,6 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($issuedate)) {
         redirect($PAGE->url, get_string('missingissuedate', 'local_sentaldocupload'), null, \core\output\notification::NOTIFY_ERROR);
     }
+    $confirmreplaceeds = optional_param('confirmreplaceeds', 0, PARAM_BOOL);
 
     $DB->get_record('user', ['id' => $userid, 'deleted' => 0], 'id', MUST_EXIST);
     if ($companyid > 0 && !local_sentaldocupload_user_in_company($userid, $companyid)) {
@@ -142,6 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($documenttype === 'type1') {
             $linkeduserids = array_values(array_unique(array_merge([$userid], $participantids)));
+            $conflicts = [];
             foreach ($linkeduserids as $linkeduserid) {
                 $linkeduserid = (int)$linkeduserid;
                 $blockingeds = local_sentaldocupload_get_blocking_eds_course_completion_document($courseid, $linkeduserid);
@@ -162,12 +165,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     $expirytext = userdate((int)$blockingeds->expirydate, get_string('strftimedate', 'langconfig'));
                 }
-                redirect($PAGE->url, get_string('activeedsdocumentblocksupload', 'local_sentaldocupload', (object)[
+                $conflicts[] = get_string('activeedsdocumentblocksupload', 'local_sentaldocupload', (object)[
                     'learner' => $learner ? fullname($learner) : (string)$linkeduserid,
                     'course' => format_string($course->fullname),
                     'status' => $statustext,
                     'expiry' => $expirytext,
-                ]), null, \core\output\notification::NOTIFY_ERROR);
+                ]);
+            }
+
+            if ($conflicts && !$confirmreplaceeds) {
+                redirect(
+                    $PAGE->url,
+                    implode("\n", $conflicts),
+                    null,
+                    \core\output\notification::NOTIFY_ERROR
+                );
             }
         }
 
@@ -244,16 +256,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ($linkeduserids as $linkeduserid) {
             $linkeduserid = (int)$linkeduserid;
             $hasedsdocument = local_sentaldocupload_user_course_has_eds_document($courseid, $linkeduserid);
-            $allowpubliccheckbox = ($documenttype === 'type1' && !$hasedsdocument);
+            $allowpubliccheckbox = ($documenttype === 'type1' && (!$hasedsdocument || $confirmreplaceeds));
             $adminselectedpublic = ($allowpubliccheckbox && !empty($uploadinfo['showinpublic']));
 
             $publicprofileoverridebyuserid[$linkeduserid] = $adminselectedpublic ? 1 : 0;
-            $publicprofilebyuserid[$linkeduserid] = local_sentaldocupload_should_show_scan_in_public_profile(
-                $documenttype,
-                $courseid,
-                $linkeduserid,
-                $adminselectedpublic
-            );
+            $publicprofilebyuserid[$linkeduserid] = $confirmreplaceeds && $documenttype === 'type1'
+                ? ($adminselectedpublic ? 1 : 0)
+                : local_sentaldocupload_should_show_scan_in_public_profile(
+                    $documenttype,
+                    $courseid,
+                    $linkeduserid,
+                    $adminselectedpublic
+                );
         }
         // Keep the document/version-level field as a current-state summary for backward compatibility.
         // Public Profile display is recalculated dynamically by local_sentaldocupload_get_public_profile_scans().
@@ -400,6 +414,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 (int)($completiontimebyuserid[$linkeduserid] ?? 0),
                 (int)($publicprofileoverridebyuserid[$linkeduserid] ?? 0)
             );
+            if ($documenttype === 'type1' && $confirmreplaceeds) {
+                $replacedcount = local_sentaldocupload_replace_ncasign_course_completion_jobs(
+                    $courseid,
+                    $linkeduserid,
+                    (int)$USER->id,
+                    $documentid,
+                    $versionid
+                );
+                if ($replacedcount > 0) {
+                    local_sentaldocupload_audit($documentid, $versionid, $linkeduserid, 'replace_eds_job');
+                }
+            }
             local_sentaldocupload_audit($documentid, $versionid, $linkeduserid, $action);
         }
 
@@ -442,6 +468,12 @@ echo html_writer::empty_tag('input', [
     'name' => 'companyid',
     'id' => 'id_companyid',
     'value' => $selectedcompanyid ?: 0,
+]);
+echo html_writer::empty_tag('input', [
+    'type' => 'hidden',
+    'name' => 'confirmreplaceeds',
+    'id' => 'id_confirmreplaceeds',
+    'value' => 0,
 ]);
 
 echo html_writer::start_div('form-group mb-3');
@@ -495,6 +527,35 @@ echo html_writer::div('', 'alert alert-warning', [
     'style' => 'display:none;',
     'aria-hidden' => 'true',
 ]);
+echo html_writer::start_div('sental-modal-backdrop', [
+    'id' => 'id_eds_replace_modal',
+    'style' => 'display:none;',
+    'aria-hidden' => 'true',
+]);
+echo html_writer::start_div('sental-confirm-modal', [
+    'role' => 'dialog',
+    'aria-modal' => 'true',
+    'aria-labelledby' => 'id_eds_replace_modal_title',
+]);
+echo html_writer::tag('h4', get_string('edsreplaceconfirmtitle', 'local_sentaldocupload'), [
+    'id' => 'id_eds_replace_modal_title',
+]);
+echo html_writer::tag('p', get_string('edsreplaceconfirmbody', 'local_sentaldocupload'));
+echo html_writer::tag('ul', '', ['id' => 'id_eds_replace_modal_list']);
+echo html_writer::start_div('sental-confirm-actions');
+echo html_writer::tag('button', get_string('cancel'), [
+    'type' => 'button',
+    'class' => 'btn btn-secondary',
+    'id' => 'id_eds_replace_cancel',
+]);
+echo html_writer::tag('button', get_string('edsreplaceconfirmbutton', 'local_sentaldocupload'), [
+    'type' => 'button',
+    'class' => 'btn btn-danger',
+    'id' => 'id_eds_replace_confirm',
+]);
+echo html_writer::end_div();
+echo html_writer::end_div();
+echo html_writer::end_div();
 
 echo html_writer::start_div('sental-document-upload-section mt-4');
 echo html_writer::tag('h4', get_string('documentfiles', 'local_sentaldocupload'));

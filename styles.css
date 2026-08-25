@@ -3516,6 +3516,56 @@ body.path-local-sentaldocupload .sental-course-record-hero .sental-course-record
     color: var(--scr-ink);
 }
 
+.sental-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1050;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(6, 16, 28, .55);
+}
+
+.sental-confirm-modal {
+    width: min(680px, 100%);
+    max-height: calc(100vh - 48px);
+    overflow: auto;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, .28);
+    padding: 24px;
+}
+
+.sental-confirm-modal h4 {
+    margin: 0 0 10px;
+    color: #12243a;
+    font-size: 22px;
+    font-weight: 700;
+}
+
+.sental-confirm-modal p {
+    margin: 0 0 16px;
+    color: #435365;
+}
+
+.sental-confirm-modal ul {
+    margin: 0 0 18px;
+    padding-left: 22px;
+    color: #12243a;
+}
+
+.sental-confirm-modal li + li {
+    margin-top: 8px;
+}
+
+.sental-confirm-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
 @media (max-width: 1000px) {
     .sental-course-record-hero-grid,
     .sental-course-record-row {

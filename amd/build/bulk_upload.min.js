@@ -42,15 +42,22 @@ define([], function() {
             var course = document.getElementById('id_courseid');
             var issueDate = document.getElementById('id_issuedate');
             var submit = document.getElementById('id_submitbutton');
+            var form = document.getElementById('sental-modeb-bulk-upload-form');
+            var confirmReplaceInput = document.getElementById('id_confirmreplaceeds');
+            var replaceModal = document.getElementById('id_eds_replace_modal');
+            var replaceModalList = document.getElementById('id_eds_replace_modal_list');
+            var replaceConfirm = document.getElementById('id_eds_replace_confirm');
+            var replaceCancel = document.getElementById('id_eds_replace_cancel');
             var preview = document.getElementById('id_expirypreview');
             var edsConflictWarning = document.getElementById('id_eds_conflict_warning');
             var addRowButton = document.getElementById('id_add_document_row');
             var noResultsNode = null;
             var courseParticipants = {};
             var selectedCourseHasEds = false;
-            var edsConflictBlocked = false;
+            var edsConflictNeedsConfirmation = false;
             var edsConflictChecking = false;
             var edsConflictRequest = 0;
+            var edsConflicts = [];
             preferredCourseId = parseInt(preferredCourseId || 0, 10) || 0;
 
             function setPreview(text, type) {
@@ -76,6 +83,40 @@ define([], function() {
                 edsConflictWarning.setAttribute('aria-hidden', 'false');
             }
 
+            function resetReplacementConfirmation() {
+                if (confirmReplaceInput) {
+                    confirmReplaceInput.value = '0';
+                }
+            }
+
+            function hideReplaceModal() {
+                if (!replaceModal) {
+                    return;
+                }
+                replaceModal.style.display = 'none';
+                replaceModal.setAttribute('aria-hidden', 'true');
+            }
+
+            function showReplaceModal() {
+                if (!replaceModal || !replaceModalList) {
+                    return false;
+                }
+
+                replaceModalList.innerHTML = '';
+                edsConflicts.forEach(function(conflict) {
+                    var item = document.createElement('li');
+                    item.textContent = conflict.message || conflict.learner || '';
+                    replaceModalList.appendChild(item);
+                });
+
+                replaceModal.style.display = '';
+                replaceModal.setAttribute('aria-hidden', 'false');
+                if (replaceConfirm) {
+                    replaceConfirm.focus();
+                }
+                return true;
+            }
+
             function visibleRows() {
                 return Array.prototype.slice.call(document.querySelectorAll('.sental-document-row')).filter(function(row) {
                     return row.style.display !== 'none';
@@ -97,7 +138,7 @@ define([], function() {
                     var row = wrap.closest ? wrap.closest('.sental-document-row') : null;
                     var rownum = row ? row.getAttribute('data-row') : '';
                     var documentType = rownum !== '' ? document.getElementById('id_documenttype' + rownum) : null;
-                    var rowBlocked = (edsConflictBlocked || edsConflictChecking) && documentType && documentType.value === 'type1';
+                    var rowBlocked = edsConflictChecking && documentType && documentType.value === 'type1';
                     if (canPickFiles && !rowBlocked) {
                         wrap.classList.remove('sental-filemanager-disabled');
                     } else {
@@ -105,7 +146,7 @@ define([], function() {
                     }
                 });
                 if (submit) {
-                    submit.disabled = !canPickFiles || edsConflictBlocked || edsConflictChecking;
+                    submit.disabled = !canPickFiles || edsConflictChecking;
                 }
                 updateRowButtons();
             }
@@ -185,9 +226,11 @@ define([], function() {
                 }
                 resetCourses(labels.selectcourseafteruser || 'Select user first');
                 setPreview(labels.expirypreviewpending || 'Select course and issue date to calculate expiry date.', 'info');
-                edsConflictBlocked = false;
+                edsConflictNeedsConfirmation = false;
                 edsConflictChecking = false;
+                edsConflicts = [];
                 setEdsConflictWarning('', 'warning');
+                resetReplacementConfirmation();
                 updateAvailability();
             }
 
@@ -243,18 +286,22 @@ define([], function() {
 
             function checkEdsConflict() {
                 if (!edsConflictUrl) {
-                    edsConflictBlocked = false;
+                    edsConflictNeedsConfirmation = false;
                     edsConflictChecking = false;
+                    edsConflicts = [];
                     setEdsConflictWarning('', 'warning');
+                    resetReplacementConfirmation();
                     updateAvailability();
                     return;
                 }
 
                 var userIds = selectedType1UserIds();
                 if (!hasValue(course) || !userIds.length) {
-                    edsConflictBlocked = false;
+                    edsConflictNeedsConfirmation = false;
                     edsConflictChecking = false;
+                    edsConflicts = [];
                     setEdsConflictWarning('', 'warning');
+                    resetReplacementConfirmation();
                     updateAvailability();
                     return;
                 }
@@ -284,8 +331,9 @@ define([], function() {
                         return;
                     }
                     if (xhr.status !== 200) {
-                        edsConflictBlocked = false;
+                        edsConflictNeedsConfirmation = false;
                         edsConflictChecking = false;
+                        edsConflicts = [];
                         setEdsConflictWarning(labels.edsconflictcheckfailed || 'Could not check existing EDS certificates. The upload will still be checked before saving.', 'warning');
                         updateAvailability();
                         return;
@@ -293,11 +341,14 @@ define([], function() {
                     try {
                         var data = JSON.parse(xhr.responseText);
                         edsConflictChecking = false;
-                        edsConflictBlocked = !!(data.success && data.blocked);
-                        setEdsConflictWarning(edsConflictBlocked ? data.message : '', edsConflictBlocked ? 'warning' : 'warning');
+                        edsConflictNeedsConfirmation = !!(data.success && data.blocked);
+                        edsConflicts = data.conflicts || [];
+                        resetReplacementConfirmation();
+                        setEdsConflictWarning(edsConflictNeedsConfirmation ? data.message : '', 'warning');
                     } catch (e) {
                         edsConflictChecking = false;
-                        edsConflictBlocked = false;
+                        edsConflictNeedsConfirmation = false;
+                        edsConflicts = [];
                         setEdsConflictWarning(labels.edsconflictcheckfailed || 'Could not check existing EDS certificates. The upload will still be checked before saving.', 'warning');
                     }
                     updateAvailability();
@@ -777,9 +828,43 @@ define([], function() {
                 addRowButton.addEventListener('click', showNextDocumentRow);
             }
 
+            if (form) {
+                form.addEventListener('submit', function(event) {
+                    if (!edsConflictNeedsConfirmation || (confirmReplaceInput && confirmReplaceInput.value === '1')) {
+                        return;
+                    }
+                    event.preventDefault();
+                    if (!showReplaceModal()) {
+                        if (window.confirm(labels.edsreplaceconfirmfallback || 'Replace existing EDS/NCA documents for the affected users?')) {
+                            if (confirmReplaceInput) {
+                                confirmReplaceInput.value = '1';
+                            }
+                            form.submit();
+                        }
+                    }
+                });
+            }
+
+            if (replaceConfirm) {
+                replaceConfirm.addEventListener('click', function() {
+                    if (confirmReplaceInput) {
+                        confirmReplaceInput.value = '1';
+                    }
+                    hideReplaceModal();
+                    if (form) {
+                        form.submit();
+                    }
+                });
+            }
+
+            if (replaceCancel) {
+                replaceCancel.addEventListener('click', hideReplaceModal);
+            }
+
             document.addEventListener('change', function(event) {
                 var typeSelect = event.target.closest ? event.target.closest('.sental-row-documenttype') : null;
                 if (typeSelect) {
+                    resetReplacementConfirmation();
                     updateDocumentTypeUI();
                     checkEdsConflict();
                 }
