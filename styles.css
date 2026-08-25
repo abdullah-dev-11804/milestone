@@ -2924,6 +2924,10 @@ body.path-user .sental-profile-documents-table .sental-student-file-link {
     text-decoration: underline;
 }
 
+.sental-course-record-warning {
+    margin: 0 0 18px;
+}
+
 .sental-course-record-hero {
     position: relative;
     overflow: hidden;

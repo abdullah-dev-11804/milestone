@@ -37,27 +37,13 @@ if (!$DB->record_exists('sental_modeb_doc_user', ['documentid' => $documentid, '
 
 $now = time();
 
-$version = (object)[
-    'id' => $versionid,
-    'showinpublicprofile' => $showinpublic,
-    'publicprofileoverride' => $showinpublic,
-];
-$DB->update_record('sental_modeb_doc_version', $version);
-
-$document = (object)[
-    'id' => $documentid,
-    'showinpublicprofile' => $showinpublic,
-    'publicprofileoverride' => $showinpublic,
-    'timemodified' => $now,
-];
-$DB->update_record('sental_modeb_doc', $document);
-
 $link = $DB->get_record('sental_modeb_doc_user', ['documentid' => $documentid, 'userid' => $userid], '*', MUST_EXIST);
 $link->showinpublicprofile = $showinpublic;
 $link->publicprofileoverride = $showinpublic;
 $DB->update_record('sental_modeb_doc_user', $link);
 
 local_sentaldocupload_audit($documentid, $versionid, $userid, 'public_visibility');
+local_sentaldocupload_refresh_public_profile_summary($documentid, $versionid);
 
 $target = $returnurl !== '' ? new moodle_url($returnurl) : new moodle_url('/local/sentaldocupload/history.php');
 redirect($target, get_string('publicprofilevisibilityupdated', 'local_sentaldocupload'), 2);

@@ -304,6 +304,8 @@ function local_sentaldocupload_history_render_results(int $page, int $perpage, m
 
     $docsql = "SELECT d.id AS documentid,
                       du.userid AS learnerid,
+                      du.showinpublicprofile AS user_showinpublicprofile,
+                      du.publicprofileoverride AS user_publicprofileoverride,
                       d.courseid,
                       d.documenttype,
                       d.customlabel,
@@ -372,8 +374,19 @@ function local_sentaldocupload_history_render_results(int $page, int $perpage, m
         if (!$selectedpayload && $versionpayloads) {
             $selectedpayload = reset($versionpayloads);
         }
-        $docdata[(int)$doc->documentid] = [
+        foreach ($versionpayloads as $idx => $payload) {
+            $payload['showinpublicprofile'] = !empty($doc->user_showinpublicprofile)
+                || !empty($doc->user_publicprofileoverride) ? 1 : 0;
+            $versionpayloads[$idx] = $payload;
+            if ($selectedpayload && (int)$selectedpayload['versionid'] === (int)$payload['versionid']) {
+                $selectedpayload = $payload;
+            }
+        }
+
+        $docdatakey = (int)$doc->documentid . ':' . (int)$doc->learnerid;
+        $docdata[$docdatakey] = [
             'documentid' => (int)$doc->documentid,
+            'learnerid' => (int)$doc->learnerid,
             'type' => (string)$doc->documenttype,
             'label' => local_sentaldocupload_history_document_type_label((string)$doc->documenttype, $doc->customlabel ?? '', $documenttypes),
             'currentversion' => (int)$doc->currentversion,
@@ -384,6 +397,7 @@ function local_sentaldocupload_history_render_results(int $page, int $perpage, m
 
     $table = new html_table();
     $table->head = [
+        '',
         get_string('course', 'local_sentaldocupload'),
         get_string('learner', 'local_sentaldocupload'),
         get_string('documenttype', 'local_sentaldocupload'),
@@ -406,7 +420,8 @@ function local_sentaldocupload_history_render_results(int $page, int $perpage, m
         }
 
         $selecteddoc = reset($documentsforrow);
-        $selecteddocdata = $docdata[(int)$selecteddoc->documentid] ?? null;
+        $selecteddocdatakey = (int)$selecteddoc->documentid . ':' . (int)$row->learnerid;
+        $selecteddocdata = $docdata[$selecteddocdatakey] ?? null;
         $selectedversion = null;
         if (!empty($selecteddocdata['versions'])) {
             foreach ($selecteddocdata['versions'] as $payload) {
@@ -422,7 +437,8 @@ function local_sentaldocupload_history_render_results(int $page, int $perpage, m
 
         $docselect = html_writer::start_tag('select', ['class' => 'form-control sental-doc-select', 'aria-label' => get_string('documenttype', 'local_sentaldocupload')]);
         foreach ($documentsforrow as $doc) {
-            $attrs = ['value' => (int)$doc->documentid];
+            $docdatakey = (int)$doc->documentid . ':' . (int)$row->learnerid;
+            $attrs = ['value' => $docdatakey];
             if ((int)$selecteddoc->documentid === (int)$doc->documentid) {
                 $attrs['selected'] = 'selected';
             }
@@ -484,8 +500,22 @@ function local_sentaldocupload_history_render_results(int $page, int $perpage, m
             $pageurl
         );
         $filecell = $selectedversion ? local_sentaldocupload_history_file_link($selectedversion) : '-';
+        $bulkattrs = [
+            'type' => 'checkbox',
+            'name' => 'items[]',
+            'value' => (int)$selecteddoc->documentid . ':' . (int)($selectedversion['versionid'] ?? 0) . ':' . (int)$row->learnerid,
+            'class' => 'sental-public-bulk-checkbox',
+            'data-userid' => (int)$row->learnerid,
+            'form' => 'sental-public-bulk-form',
+            'aria-label' => get_string('select'),
+        ];
+        if ((string)$selecteddoc->documenttype !== 'type1' || empty($selectedversion['versionid'])) {
+            $bulkattrs['disabled'] = 'disabled';
+        }
+        $bulkcell = html_writer::empty_tag('input', $bulkattrs);
 
         $table->data[] = [
+            $bulkcell,
             $coursecell,
             $learner,
             $docselect,
@@ -500,6 +530,32 @@ function local_sentaldocupload_history_render_results(int $page, int $perpage, m
         ];
     }
 
+    $bulkform = html_writer::start_tag('form', [
+        'method' => 'post',
+        'action' => (new moodle_url('/local/sentaldocupload/bulk_toggle_public.php'))->out(false),
+        'id' => 'sental-public-bulk-form',
+        'class' => 'sental-public-bulk-form',
+    ]);
+    $bulkform .= html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey()]);
+    $bulkform .= html_writer::empty_tag('input', ['type' => 'hidden', 'name' => 'returnurl', 'value' => $pageurl->out_as_local_url(false)]);
+    $bulkform .= html_writer::div(
+        html_writer::tag('button', get_string('publicprofileshowselected', 'local_sentaldocupload'), [
+            'type' => 'submit',
+            'name' => 'publicaction',
+            'value' => 'show',
+            'class' => 'btn btn-sm btn-outline-success mr-2',
+        ]) .
+        html_writer::tag('button', get_string('publicprofilehideselected', 'local_sentaldocupload'), [
+            'type' => 'submit',
+            'name' => 'publicaction',
+            'value' => 'hide',
+            'class' => 'btn btn-sm btn-outline-danger',
+        ]),
+        'sental-public-bulk-actions mb-2'
+    );
+    $bulkform .= html_writer::end_tag('form');
+
+    $html .= $bulkform;
     $html .= html_writer::div(html_writer::table($table), 'sental-history-table-wrap');
     $html .= html_writer::tag('script', json_encode($docdata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), [
         'type' => 'application/json',
@@ -711,6 +767,7 @@ $filterjs = <<<HTML
             var uploadedat = row.querySelector('.sental-version-uploadedat');
             var publiccell = row.querySelector('.sental-version-publiccell');
             var filecell = row.querySelector('.sental-version-filecell');
+            var bulkcheckbox = row.querySelector('.sental-public-bulk-checkbox');
             if (issue) { issue.textContent = payload.issuedate || '-'; }
             if (expiry) { expiry.textContent = payload.expirydate || '-'; }
             if (status) {
@@ -744,6 +801,11 @@ $filterjs = <<<HTML
                     form.style.display = isTypeOne ? '' : 'none';
                 }
                 if (na) { na.style.display = isTypeOne ? 'none' : ''; }
+            }
+            if (bulkcheckbox) {
+                bulkcheckbox.value = (payload.documentid || '') + ':' + (payload.versionid || '') + ':' + (payload.userid || bulkcheckbox.dataset.userid || '');
+                bulkcheckbox.disabled = payload.documenttype !== 'type1' || !payload.versionid;
+                bulkcheckbox.checked = false;
             }
         }
 
@@ -784,7 +846,8 @@ $filterjs = <<<HTML
                             showinpublicprofile: selected.dataset.showinpublicprofile,
                             documentid: selected.dataset.documentid,
                             documenttype: selected.dataset.documenttype,
-                            versionid: selected.value
+                            versionid: selected.value,
+                            userid: row.querySelector('.sental-public-bulk-checkbox') ? row.querySelector('.sental-public-bulk-checkbox').dataset.userid : ''
                         });
                     }
                 });
@@ -811,7 +874,8 @@ $filterjs = <<<HTML
                         showinpublicprofile: opt.dataset.showinpublicprofile,
                         documentid: opt.dataset.documentid,
                         documenttype: opt.dataset.documenttype,
-                        versionid: opt.value
+                        versionid: opt.value,
+                        userid: row.querySelector('.sental-public-bulk-checkbox') ? row.querySelector('.sental-public-bulk-checkbox').dataset.userid : ''
                     });
                 });
             });

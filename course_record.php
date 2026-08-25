@@ -522,11 +522,16 @@ $initials = $initials !== '' ? $initials : core_text::strtoupper(core_text::subs
 
 $score = local_sentaldocupload_course_record_score($userid, $courseid);
 $dates = local_sentaldocupload_course_record_dates($userid, $courseid);
+$completionenabled = !empty($course->enablecompletion);
 $completiondoc = $documents['completion'];
 $status = $completiondoc ? (string)$completiondoc->status : 'nodocument';
 
-$formatdate = static function(?int $timestamp): string {
-    return empty($timestamp) ? '-' : userdate($timestamp, get_string('strftimedate', 'langconfig'));
+$formatdate = static function(?int $timestamp, bool $includetime = false): string {
+    if (empty($timestamp)) {
+        return '-';
+    }
+
+    return userdate($timestamp, get_string($includetime ? 'strftimedatetime' : 'strftimedate', 'langconfig'));
 };
 
 $durationseconds = ($dates['started'] && $dates['completed'] && $dates['completed'] > $dates['started'])
@@ -601,6 +606,13 @@ echo html_writer::div(
     ]),
     'sental-course-record-crumbs'
 );
+
+if (!$completionenabled) {
+    echo html_writer::div(
+        get_string('coursecompletiondisabledwarning', 'local_sentaldocupload'),
+        'sental-course-record-warning alert alert-danger'
+    );
+}
 
 echo html_writer::start_tag('section', ['class' => 'sental-course-record-hero status-' . s($status), 'style' => $heroimagestyle]);
 echo html_writer::start_div('sental-course-record-hero-grid');
@@ -680,8 +692,8 @@ echo html_writer::div(
     'sental-course-record-time-top'
 );
 echo html_writer::div(
-    html_writer::div(html_writer::span('', 'sental-course-record-step-dot') . html_writer::div(html_writer::tag('small', get_string('started', 'local_sentaldocupload')) . html_writer::tag('b', s($formatdate($dates['started'])))), 'sental-course-record-step') .
-    html_writer::div(html_writer::span('', 'sental-course-record-step-dot') . html_writer::div(html_writer::tag('small', get_string('completed', 'local_sentaldocupload')) . html_writer::tag('b', s($formatdate($dates['completed'])))), 'sental-course-record-step done'),
+    html_writer::div(html_writer::span('', 'sental-course-record-step-dot') . html_writer::div(html_writer::tag('small', get_string('started', 'local_sentaldocupload')) . html_writer::tag('b', s($formatdate($dates['started'], true)))), 'sental-course-record-step') .
+    html_writer::div(html_writer::span('', 'sental-course-record-step-dot') . html_writer::div(html_writer::tag('small', get_string('completed', 'local_sentaldocupload')) . html_writer::tag('b', s($formatdate($dates['completed'], true)))), 'sental-course-record-step done'),
     'sental-course-record-steps'
 );
 echo html_writer::end_tag('section');

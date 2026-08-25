@@ -52,16 +52,8 @@ if (!$record) {
     throw new moodle_exception('filenotfound');
 }
 
-// Same rule as public profile card rendering:
-// Type 1 only, and at least one public-profile flag must be checked.
-// Older versions may have saved the checkbox on the document/user level only.
-$ispublic = !empty($record->version_showinpublicprofile)
-    || !empty($record->version_publicprofileoverride)
-    || !empty($record->user_showinpublicprofile)
-    || !empty($record->user_publicprofileoverride)
-    || !empty($record->doc_showinpublicprofile);
-
-if (!$ispublic) {
+// Same rule as public profile card rendering.
+if (!local_sentaldocupload_record_is_public_profile_visible($record)) {
     throw new moodle_exception('filenotfound');
 }
 

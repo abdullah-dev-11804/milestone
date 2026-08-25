@@ -1159,11 +1159,7 @@ function local_sentaldocupload_get_public_profile_scans(int $userid, ?int $cours
         // A scan is public when the uploaded Type 1 version is checked for public profile.
         // For older records, accept document/user-level public flags as fallback because
         // some previous plugin versions saved the checkbox at those levels only.
-        $ispublic = !empty($record->version_showinpublicprofile)
-            || !empty($record->version_publicprofileoverride)
-            || !empty($record->user_showinpublicprofile)
-            || !empty($record->user_publicprofileoverride)
-            || !empty($record->doc_showinpublicprofile);
+        $ispublic = local_sentaldocupload_record_is_public_profile_visible($record);
 
         if (!$ispublic) {
             continue;
@@ -1201,6 +1197,104 @@ function local_sentaldocupload_get_public_profile_scans(int $userid, ?int $cours
     }
 
     return $visible;
+}
+
+/**
+ * Resolve Public Profile visibility for a manual-upload document row.
+ *
+ * New edits are stored per learner/document link. Older uploads may have saved
+ * the flag only on the document/version rows, so those remain fallback values
+ * until an admin explicitly edits visibility for that learner/document.
+ *
+ * @param stdClass $record
+ * @return bool
+ */
+function local_sentaldocupload_record_is_public_profile_visible(stdClass $record): bool {
+    $userpublic = !empty($record->user_showinpublicprofile)
+        || !empty($record->user_publicprofileoverride);
+
+    if (local_sentaldocupload_has_public_profile_visibility_edit(
+            (int)($record->documentid ?? 0),
+            (int)($record->userid ?? 0))) {
+        return $userpublic;
+    }
+
+    return $userpublic
+        || !empty($record->version_showinpublicprofile)
+        || !empty($record->version_publicprofileoverride)
+        || !empty($record->doc_showinpublicprofile);
+}
+
+/**
+ * Check whether Public Profile visibility was manually edited for one learner/document.
+ *
+ * @param int $documentid
+ * @param int $userid
+ * @return bool
+ */
+function local_sentaldocupload_has_public_profile_visibility_edit(int $documentid, int $userid): bool {
+    global $DB;
+
+    if ($documentid <= 0 || $userid <= 0 || !$DB->get_manager()->table_exists('sental_modeb_audit')) {
+        return false;
+    }
+
+    return $DB->record_exists('sental_modeb_audit', [
+        'documentid' => $documentid,
+        'userid' => $userid,
+        'actiontype' => 'public_visibility',
+    ]);
+}
+
+/**
+ * Refresh document/version public summary fields from learner-specific links.
+ *
+ * @param int $documentid
+ * @param int $versionid
+ * @return void
+ */
+function local_sentaldocupload_refresh_public_profile_summary(int $documentid, int $versionid = 0): void {
+    global $DB;
+
+    if ($documentid <= 0) {
+        return;
+    }
+
+    $columns = $DB->get_columns('sental_modeb_doc_user');
+    if (isset($columns['showinpublicprofile'])) {
+        $summary = (int)$DB->record_exists('sental_modeb_doc_user', [
+            'documentid' => $documentid,
+            'showinpublicprofile' => 1,
+        ]);
+    } else {
+        $summary = 0;
+    }
+
+    $doccolumns = $DB->get_columns('sental_modeb_doc');
+    $docupdate = (object)['id' => $documentid, 'timemodified' => time()];
+    if (isset($doccolumns['showinpublicprofile'])) {
+        $docupdate->showinpublicprofile = $summary;
+    }
+    if (isset($doccolumns['publicprofileoverride'])) {
+        $docupdate->publicprofileoverride = $summary;
+    }
+    if (count((array)$docupdate) > 2) {
+        $DB->update_record('sental_modeb_doc', $docupdate);
+    }
+
+    if ($versionid > 0 && $DB->record_exists('sental_modeb_doc_version', ['id' => $versionid])) {
+        $versioncolumns = $DB->get_columns('sental_modeb_doc_version');
+        $versionupdate = (object)['id' => $versionid];
+        if (isset($versioncolumns['showinpublicprofile'])) {
+            $versionupdate->showinpublicprofile = $summary;
+        }
+        if (isset($versioncolumns['publicprofileoverride'])) {
+            $versionupdate->publicprofileoverride = $summary;
+        }
+        if (count((array)$versionupdate) > 1) {
+            $DB->update_record('sental_modeb_doc_version', $versionupdate);
+        }
+    }
 }
 
 /**
