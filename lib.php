@@ -1728,8 +1728,8 @@ function local_sentaldocupload_render_public_profile_certifications(int $userid)
 /**
  * Return latest document rows for the profile documents block.
  *
- * This mirrors the My Certifications table at a compact level and includes
- * both uploaded documents and completed EDS/NCA signed documents.
+ * This mirrors the Public Profile document table at a compact level and includes
+ * public Type 1 uploaded documents plus completed EDS/NCA signed documents.
  *
  * @param int $userid
  * @return array<int, stdClass>
@@ -1757,19 +1757,28 @@ function local_sentaldocupload_get_profile_document_rows(int $userid): array {
                       v.customlabel AS versionlabel,
                       v.issuedate,
                       v.expirydate,
-                      v.timecreated
+                      v.timecreated,
+                      COALESCE(du.showinpublicprofile, 0) AS user_showinpublicprofile,
+                      COALESCE(du.publicprofileoverride, 0) AS user_publicprofileoverride
                  FROM {sental_modeb_doc_user} du
                  JOIN {sental_modeb_doc} d ON d.id = du.documentid
                  JOIN {sental_modeb_doc_version} v ON v.documentid = d.id
                  JOIN {course} c ON c.id = d.courseid
                 WHERE du.userid = :userid
-                  AND d.documenttype IN ('type1', 'type2')
+                  AND d.documenttype = 'type1'
+                  AND (
+                        COALESCE(du.showinpublicprofile, 0) = 1
+                     OR COALESCE(du.publicprofileoverride, 0) = 1
+                  )
                   AND c.id <> :siteid
-             ORDER BY c.fullname ASC, d.documenttype ASC, d.id ASC, v.versionno DESC, v.timecreated DESC";
+             ORDER BY c.fullname ASC, d.id ASC, v.versionno DESC, v.timecreated DESC";
     foreach ($DB->get_records_sql($docsql, ['userid' => $userid, 'siteid' => SITEID]) as $row) {
         $row->ncasignjobid = 0;
         $row->profileviewurl = (new moodle_url('/local/sentaldocupload/viewer.php', [
             'versionid' => (int)$row->versionid,
+            'userid' => $userid,
+            'courseid' => (int)$row->courseid,
+            'public' => 1,
         ]))->out(false);
         $rows[] = $row;
     }

@@ -61,19 +61,44 @@ if ($public) {
     } else if (empty($versionid) || empty($userid) || empty($courseid)) {
         throw new moodle_exception('filenotfound');
     } else {
-        // Use the same Public Profile visibility helper used by the profile cards.
-        // This keeps Public Profile, View Document, and file serving logic aligned.
-        $publicrecords = local_sentaldocupload_get_public_profile_scans($userid, $courseid);
-        foreach ($publicrecords as $publicrecord) {
-            if ((int)$publicrecord->versionid === $versionid) {
-                $record = $publicrecord;
-                $ispublicviewer = true;
-                break;
-            }
-        }
-        if (!$record) {
+        $ducolumns = $DB->get_columns('sental_modeb_doc_user');
+        $useroverrideexpr = isset($ducolumns['publicprofileoverride'])
+            ? 'COALESCE(du.publicprofileoverride, 0)'
+            : '0';
+
+        $sql = "SELECT v.id AS id,
+                       v.id AS versionid,
+                       v.documentid,
+                       v.versionno,
+                       v.filename,
+                       v.issuedate,
+                       v.expirydate,
+                       d.courseid,
+                       d.documenttype,
+                       c.fullname AS coursefullname,
+                       c.shortname AS courseshortname,
+                       du.userid,
+                       COALESCE(du.showinpublicprofile, 0) AS user_showinpublicprofile,
+                       $useroverrideexpr AS user_publicprofileoverride
+                  FROM {sental_modeb_doc_version} v
+                  JOIN {sental_modeb_doc} d ON d.id = v.documentid
+                  JOIN {sental_modeb_doc_user} du ON du.documentid = d.id
+                  JOIN {course} c ON c.id = d.courseid
+                 WHERE v.id = :versionid
+                   AND du.userid = :userid
+                   AND d.courseid = :courseid
+                   AND d.documenttype = :doctype";
+        $record = $DB->get_record_sql($sql, [
+            'versionid' => $versionid,
+            'userid' => $userid,
+            'courseid' => $courseid,
+            'doctype' => 'type1',
+        ], IGNORE_MISSING);
+
+        if (!$record || !local_sentaldocupload_record_is_public_profile_visible($record)) {
             throw new moodle_exception('filenotfound');
         }
+        $ispublicviewer = true;
     }
 } else {
     require_login();
