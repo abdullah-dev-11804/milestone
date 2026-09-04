@@ -649,6 +649,81 @@ function local_sentaldocupload_get_user_company_ids(int $userid): array {
 }
 
 /**
+ * Check whether the current user has one of the provided role shortnames.
+ *
+ * @param array $shortnames
+ * @return bool
+ */
+function local_sentaldocupload_current_user_has_role_shortname(array $shortnames): bool {
+    global $DB, $USER;
+
+    if (empty($USER->id) || empty($shortnames)) {
+        return false;
+    }
+
+    [$rolesql, $roleparams] = $DB->get_in_or_equal($shortnames, SQL_PARAMS_NAMED, 'sentaldocrole');
+    $params = ['userid' => (int)$USER->id] + $roleparams;
+
+    return $DB->record_exists_sql(
+        "SELECT 1
+           FROM {role_assignments} ra
+           JOIN {role} r ON r.id = ra.roleid
+          WHERE ra.userid = :userid
+            AND r.shortname $rolesql",
+        $params
+    );
+}
+
+/**
+ * Check whether the current user may view another learner's document records.
+ *
+ * This is intentionally stricter than plain course enrolment. A learner enrolled
+ * in the same course must not be able to access other learners' certificates by
+ * changing a job or version id in the URL.
+ *
+ * @param int $learnerid
+ * @return bool
+ */
+function local_sentaldocupload_current_user_can_view_learner_documents(int $learnerid): bool {
+    global $USER;
+
+    if (!isloggedin() || isguestuser() || $learnerid <= 0) {
+        return false;
+    }
+    if ((int)$USER->id === $learnerid || is_siteadmin()) {
+        return true;
+    }
+
+    $systemcontext = context_system::instance();
+    if (has_capability('local/sentaldocupload:manage', $systemcontext)) {
+        return true;
+    }
+    if (!has_capability('local/sentaldocupload:viewdocuments', $systemcontext)) {
+        return false;
+    }
+
+    if (!local_sentaldocupload_current_user_has_role_shortname([
+        'companyowner',
+        'companymanager',
+        'trainingmanager',
+        'manager',
+    ])) {
+        return false;
+    }
+
+    if (!local_sentaldocupload_iomad_tables_exist()) {
+        return true;
+    }
+
+    $viewercompanies = local_sentaldocupload_get_user_company_ids((int)$USER->id);
+    $learnercompanies = local_sentaldocupload_get_user_company_ids($learnerid);
+
+    return !empty($viewercompanies)
+        && !empty($learnercompanies)
+        && !empty(array_intersect($viewercompanies, $learnercompanies));
+}
+
+/**
  * Check if a selected learner belongs to a selected company.
  *
  * @param int $userid

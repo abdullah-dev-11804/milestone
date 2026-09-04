@@ -113,8 +113,9 @@ if ($public) {
 
         $coursecontext = context_course::instance((int)$job->courseid, IGNORE_MISSING);
         $ownsdocument = ((int)$job->userid === (int)$USER->id);
-        $isenrolledincourse = ($coursecontext && is_enrolled($coursecontext, $USER, '', true));
-        if (!$canviewdocuments && !$ownsdocument && !$isenrolledincourse) {
+        $canncasignmanage = has_capability('local/ncasign:managejobs', $context);
+        $canviewlearnerdocuments = local_sentaldocupload_current_user_can_view_learner_documents((int)$job->userid);
+        if (!$canncasignmanage && !$ownsdocument && !$canviewlearnerdocuments) {
             throw new required_capability_exception($context, 'local/sentaldocupload:manage', 'nopermissions', 'error');
         }
 
